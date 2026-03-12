@@ -355,8 +355,16 @@ tbody td.num{text-align:right;font-family:'IBM Plex Mono',monospace;}
     <div class="app-logo">I|A <span>GESTIÓN LEGAL</span></div>
   </div>
   <div class="header-right">
+    <div class="sync-controls">
+      <div class="sync-indicator" id="syncIndicator">
+        <span id="syncText"></span>
+      </div>
+      <button class="sync-btn" onclick="manualSync()" id="syncBtnHeader">
+        <span>↻</span>
+        <span>Sincronizar</span>
+      </button>
+    </div>
     <span class="api-notice" id="feriadosStatus"></span>
-    <span class="api-notice" id="syncStatus" style="font-size:.65rem;"></span>
     <div class="header-date" id="headerDate"></div>
   </div>
 </header>
