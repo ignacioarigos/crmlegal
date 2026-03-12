@@ -1682,6 +1682,11 @@ document.querySelectorAll('.modal-overlay').forEach(m=>{m.addEventListener('clic
   if(ok){
     loading.style.display='none';
     populateCausaSelects();updateStats();renderCal();
+    
+    // Iniciar auto-sync
+    startAutoSync();
+    SYNC_CONFIG.lastSync = new Date();
+    updateSyncTimestamp();
   }else{
     document.getElementById('dbLoadMsg').innerHTML='';
     loading.querySelector('.spinner').style.display='none';
