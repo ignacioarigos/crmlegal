@@ -380,6 +380,13 @@ tbody td.num{text-align:right;font-family:'IBM Plex Mono',monospace;}
       <div class="nav-item" onclick="showScreen('gastos');closeSidebar()"><span class="nav-icon">💰</span> Gastos</div>
       <div class="nav-item" onclick="showScreen('causas');closeSidebar()"><span class="nav-icon">📁</span> Causas <span class="nav-badge" id="badgeCausas">0</span></div>
     </div>
+  <div class="sidebar-sync">
+    <div class="sidebar-sync-title">Sincronización</div>
+    <div class="sidebar-sync-status" id="sidebarSyncStatus">
+    <span>Última actualización: nunca</span>
+  </div>
+  <button class="sidebar-sync-btn" onclick="manualSync()">↻ Sincronizar ahora</button>
+</div>
     <div class="sidebar-cal">
       <div class="cal-header">
         <button class="cal-nav" onclick="calNav(-1)">‹</button>
