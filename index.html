@@ -895,7 +895,7 @@ function refreshCurrentScreen() {
 setInterval(updateSyncTimestamp, 60000);
   
 async function loadAll(){
-  setSyncStatus('⏳');
+  setSyncStatus('syncing', '');
   try{
     const[t,c,r,g,e,tr]=await Promise.all([
       DB.get('crm_tareas'),DB.get('crm_causas'),DB.get('crm_registros'),
@@ -903,21 +903,20 @@ async function loadAll(){
     ]);
     cache.tareas=t||[];cache.causas=c||[];cache.registros=r||[];
     cache.gastos=g||[];cache.eventos=e||[];
-    // Si no hay tramites en DB, carga los defaults
     if(!tr||tr.length===0){
       await seedTramites();
     }else{
       cache.tramites=tr;
     }
-    setSyncStatus('');
+    setSyncStatus('idle', '');
     return true;
   }catch(e){
-    setSyncStatus('⚠ Sin conexión');
+    setSyncStatus('error', '⚠ Sin conexión');
     console.error(e);
     return false;
   }
 }
-
+  
 async function seedTramites(){
   const defaults=getTramitesDefault();
   for(const t of defaults){
