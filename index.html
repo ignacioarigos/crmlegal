@@ -1675,6 +1675,9 @@ document.querySelectorAll('.modal-overlay').forEach(m=>{m.addEventListener('clic
 // ══════════════════════════════════════════════════════════════
 // INIT
 // ══════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════════════════
 (async function(){
   document.getElementById('headerDate').textContent=new Date().toLocaleDateString('es-AR',{weekday:'long',year:'numeric',month:'long',day:'numeric'}).toUpperCase();
   preloadFeriados();
@@ -1684,7 +1687,7 @@ document.querySelectorAll('.modal-overlay').forEach(m=>{m.addEventListener('clic
     loading.style.display='none';
     populateCausaSelects();updateStats();renderCal();
     
-    // Iniciar auto-sync
+    // ✅ Iniciar auto-sync
     startAutoSync();
     SYNC_CONFIG.lastSync = new Date();
     updateSyncTimestamp();
