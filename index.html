@@ -28,6 +28,24 @@ body{font-family:'IBM Plex Sans',sans-serif;background:var(--paper);color:var(--
 .header-date{font-family:'IBM Plex Mono',monospace;font-size:.68rem;color:var(--muted);letter-spacing:.05em;}
 .hamburger{display:none;background:none;border:none;color:var(--paper);font-size:1.4rem;cursor:pointer;padding:.2rem .4rem;line-height:1;}
 
+/* ── SYNC CONTROLS ── */
+.sync-controls{display:flex;align-items:center;gap:.6rem;}
+.sync-indicator{font-family:'IBM Plex Mono',monospace;font-size:.65rem;color:var(--muted);display:flex;align-items:center;gap:.35rem;transition:all .2s;}
+.sync-indicator.syncing{color:var(--gold-light);}
+.sync-indicator.success{color:var(--ok);}
+.sync-indicator.error{color:var(--urgent);}
+.sync-spinner{width:10px;height:10px;border:2px solid #2a2920;border-top-color:var(--gold);border-radius:50%;animation:spin .6s linear infinite;}
+
+.sync-btn{background:none;border:1px solid #555;color:var(--muted);border-radius:4px;padding:.25rem .5rem;font-size:.7rem;cursor:pointer;transition:all .15s;font-family:'IBM Plex Mono',monospace;display:flex;align-items:center;gap:.3rem;}
+.sync-btn:hover{border-color:var(--gold);color:var(--gold-light);}
+.sync-btn:active{transform:scale(.95);}
+
+/* ── SIDEBAR SYNC SECTION ── */
+.sidebar-sync{padding:.8rem 1.2rem;border-top:1px solid #2a2926;border-bottom:1px solid #2a2926;}
+.sidebar-sync-title{font-family:'IBM Plex Mono',monospace;font-size:.6rem;color:#5a5248;text-transform:uppercase;letter-spacing:.08em;margin-bottom:.5rem;}
+.sidebar-sync-status{font-size:.7rem;color:#9a9080;margin-bottom:.6rem;display:flex;align-items:center;gap:.4rem;}
+.sidebar-sync-btn{width:100%;background:rgba(184,146,42,.12);border:1px solid rgba(184,146,42,.3);color:var(--gold-light);border-radius:5px;padding:.4rem .6rem;font-size:.7rem;cursor:pointer;transition:all .15s;font-family:'IBM Plex Mono',monospace;text-align:center;}
+.sidebar-sync-btn:hover{background:rgba(184,146,42,.2);border-color:var(--gold);}
 .app-body{display:flex;height:100vh;padding-top:52px;}
 
 /* ── SIDEBAR ── */
