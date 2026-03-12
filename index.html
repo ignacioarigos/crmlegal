@@ -702,7 +702,198 @@ const DB={
 
 // ── Cache local (evita re-fetches innecesarios) ──
 const cache={tareas:[],causas:[],registros:[],gastos:[],eventos:[],tramites:[]};
+// ══════════════════════════════════════════════════════════════
+// AUTO-SYNC SYSTEM
+// ══════════════════════════════════════════════════════════════
+const SYNC_CONFIG = {
+  interval: 30000, // 30 segundos
+  lastSync: null,
+  timer: null,
+  isRunning: false
+};
 
+function startAutoSync() {
+  if (SYNC_CONFIG.isRunning) return;
+  SYNC_CONFIG.isRunning = true;
+  
+  autoSyncData();
+  SYNC_CONFIG.timer = setInterval(autoSyncData, SYNC_CONFIG.interval);
+  console.log('🔄 Auto-sync iniciado (cada 30s)');
+}
+
+function stopAutoSync() {
+  if (SYNC_CONFIG.timer) {
+    clearInterval(SYNC_CONFIG.timer);
+    SYNC_CONFIG.timer = null;
+  }
+  SYNC_CONFIG.isRunning = false;
+  console.log('⏸️ Auto-sync detenido');
+}
+
+async function autoSyncData() {
+  const hasOpenModal = Array.from(document.querySelectorAll('.modal-overlay')).some(m => !m.classList.contains('hidden'));
+  if (hasOpenModal) {
+    console.log('⏭️ Sync omitido: modal abierto');
+    return;
+  }
+  
+  try {
+    const oldData = {
+      tareas: cache.tareas.length,
+      causas: cache.causas.length,
+      registros: cache.registros.length,
+      gastos: cache.gastos.length,
+      eventos: cache.eventos.length,
+      tramites: cache.tramites.length
+    };
+    
+    const [t, c, r, g, e, tr] = await Promise.all([
+      DB.get('crm_tareas'), DB.get('crm_causas'), DB.get('crm_registros'),
+      DB.get('crm_gastos'), DB.get('crm_eventos'), DB.get('crm_tramites')
+    ]);
+    
+    const hasChanges = 
+      t.length !== oldData.tareas ||
+      c.length !== oldData.causas ||
+      r.length !== oldData.registros ||
+      g.length !== oldData.gastos ||
+      e.length !== oldData.eventos ||
+      tr.length !== oldData.tramites;
+    
+    if (hasChanges) {
+      cache.tareas = t || [];
+      cache.causas = c || [];
+      cache.registros = r || [];
+      cache.gastos = g || [];
+      cache.eventos = e || [];
+      cache.tramites = tr || [];
+      
+      refreshCurrentScreen();
+      updateStats();
+      renderCal();
+      
+      setSyncStatus('success', '✓ Actualizado');
+      console.log('✅ Datos sincronizados - cambios detectados');
+    } else {
+      setSyncStatus('idle', '');
+      console.log('ℹ️ Sin cambios');
+    }
+    
+    SYNC_CONFIG.lastSync = new Date();
+    updateSyncTimestamp();
+    
+  } catch (e) {
+    console.error('❌ Error en auto-sync:', e);
+    setSyncStatus('error', '⚠ Error');
+  }
+}
+
+function setSyncStatus(state, text) {
+  const indicator = document.getElementById('syncIndicator');
+  const textEl = document.getElementById('syncText');
+  
+  indicator.className = 'sync-indicator';
+  
+  switch(state) {
+    case 'syncing':
+      indicator.classList.add('syncing');
+      textEl.innerHTML = '<div class="sync-spinner"></div><span>Sincronizando...</span>';
+      break;
+    case 'success':
+      indicator.classList.add('success');
+      textEl.textContent = text;
+      setTimeout(() => {
+        if (textEl.textContent === text) {
+          textEl.textContent = '';
+          indicator.className = 'sync-indicator';
+        }
+      }, 3000);
+      break;
+    case 'error':
+      indicator.classList.add('error');
+      textEl.textContent = text;
+      break;
+    case 'idle':
+    default:
+      textEl.textContent = text;
+      break;
+  }
+}
+
+function updateSyncTimestamp() {
+  if (!SYNC_CONFIG.lastSync) return;
+  
+  const now = new Date();
+  const diff = Math.floor((now - SYNC_CONFIG.lastSync) / 1000);
+  
+  let timeText;
+  if (diff < 60) {
+    timeText = 'hace ' + diff + 's';
+  } else if (diff < 3600) {
+    timeText = 'hace ' + Math.floor(diff / 60) + 'm';
+  } else {
+    timeText = SYNC_CONFIG.lastSync.toLocaleTimeString('es-AR', {hour: '2-digit', minute: '2-digit'});
+  }
+  
+  const statusEl = document.getElementById('sidebarSyncStatus');
+  if (statusEl) {
+    statusEl.innerHTML = `<span>Última actualización: ${timeText}</span>`;
+  }
+}
+
+async function manualSync() {
+  setSyncStatus('syncing', '');
+  
+  try {
+    await loadAll();
+    refreshCurrentScreen();
+    updateStats();
+    renderCal();
+    
+    SYNC_CONFIG.lastSync = new Date();
+    updateSyncTimestamp();
+    setSyncStatus('success', '✓ Sincronizado');
+    
+    console.log('✅ Sincronización manual completada');
+  } catch (e) {
+    console.error('❌ Error en sincronización manual:', e);
+    setSyncStatus('error', '⚠ Error al sincronizar');
+  }
+}
+
+function refreshCurrentScreen() {
+  const activeScreen = document.querySelector('.screen.active');
+  if (!activeScreen) return;
+  
+  const screenId = activeScreen.id.replace('screen-', '');
+  
+  switch(screenId) {
+    case 'tareas':
+      renderTareas();
+      break;
+    case 'registro':
+      const activeTab = document.querySelector('#screen-registro .tab.active');
+      const tabText = activeTab ? activeTab.textContent.trim() : 'Todos';
+      const filtro = tabText === 'Todos' ? null : tabText;
+      renderRegistros(filtro);
+      break;
+    case 'gastos':
+      populateCausaSelects();
+      renderGastos();
+      renderTramites();
+      break;
+    case 'causas':
+      renderCausas();
+      break;
+    case 'causa-detail':
+      const causaId = document.getElementById('causaDetailContent').dataset.causaId;
+      if (causaId) showCausaDetail(causaId);
+      break;
+  }
+}
+
+setInterval(updateSyncTimestamp, 60000);
+  
 async function loadAll(){
   setSyncStatus('⏳');
   try{
