@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#0f0e0c">
 <title>I|A — Sistema de Gestión Legal</title>
@@ -540,7 +540,7 @@ tbody td.num{text-align:right;font-family:'IBM Plex Mono',monospace;}
     <div class="form-group" style="margin-bottom:1rem;"><label>Notas</label><textarea class="form-control" id="tarea_notas" rows="2" placeholder="Detalles..."></textarea></div>
     <div style="display:flex;justify-content:flex-end;gap:.6rem;">
       <button class="btn btn-ghost" onclick="closeModal('modalTarea')">Cancelar</button>
-      <button class="btn btn-primary" onclick="saveTarea()">Guardar</button>
+      <button class="btn btn-primary" id="btnGuardarTarea" onclick="saveTarea()">Guardar</button>
     </div>
   </div>
 </div>
@@ -686,8 +686,15 @@ const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZ
 
 async function sbFetch(path,opts={}){
   const r=await fetch(SB_URL+'/rest/v1/'+path,{
-    headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation',...(opts.headers||{})},
-    ...opts
+    headers:{
+      'apikey':SB_KEY,
+      'Authorization':'Bearer '+SB_KEY,
+      'Content-Type':'application/json',
+      'Prefer':'return=representation',
+      ...(opts.extraHeaders||{})
+    },
+    method:opts.method||'GET',
+    body:opts.body||undefined
   });
   if(!r.ok){const e=await r.text();throw new Error(e);}
   const txt=await r.text();
@@ -698,238 +705,112 @@ const DB={
   async get(table){return sbFetch(table+'?order=fecha.asc');},
   async insert(table,obj){return sbFetch(table,{method:'POST',body:JSON.stringify(obj)});},
   async update(table,id,obj){return sbFetch(table+'?id=eq.'+id,{method:'PATCH',body:JSON.stringify(obj)});},
-  async delete(table,id){return sbFetch(table+'?id=eq.'+id,{method:'DELETE',headers:{Prefer:''}});},
-  async deleteWhere(table,field,val){return sbFetch(table+'?'+field+'=eq.'+encodeURIComponent(val),{method:'DELETE',headers:{Prefer:''}});}
+  // FIX: DELETE ya no pasa headers extra que pisaban apikey
+  async delete(table,id){return sbFetch(table+'?id=eq.'+id,{method:'DELETE'});},
+  async deleteWhere(table,field,val){return sbFetch(table+'?'+field+'=eq.'+encodeURIComponent(val),{method:'DELETE'});}
 };
 
-// ── Cache local (evita re-fetches innecesarios) ──
+// ── Cache local ──
 const cache={tareas:[],causas:[],registros:[],gastos:[],eventos:[],tramites:[]};
+
 // ══════════════════════════════════════════════════════════════
 // AUTO-SYNC SYSTEM
 // ══════════════════════════════════════════════════════════════
-const SYNC_CONFIG = {
-  interval: 30000, // 30 segundos
-  lastSync: null,
-  timer: null,
-  isRunning: false
-};
+const SYNC_CONFIG={interval:30000,lastSync:null,timer:null,isRunning:false};
 
-function startAutoSync() {
-  if (SYNC_CONFIG.isRunning) return;
-  SYNC_CONFIG.isRunning = true;
-  
+function startAutoSync(){
+  if(SYNC_CONFIG.isRunning)return;
+  SYNC_CONFIG.isRunning=true;
   autoSyncData();
-  SYNC_CONFIG.timer = setInterval(autoSyncData, SYNC_CONFIG.interval);
-  console.log('🔄 Auto-sync iniciado (cada 30s)');
+  SYNC_CONFIG.timer=setInterval(autoSyncData,SYNC_CONFIG.interval);
 }
 
-function stopAutoSync() {
-  if (SYNC_CONFIG.timer) {
-    clearInterval(SYNC_CONFIG.timer);
-    SYNC_CONFIG.timer = null;
-  }
-  SYNC_CONFIG.isRunning = false;
-  console.log('⏸️ Auto-sync detenido');
+function stopAutoSync(){
+  if(SYNC_CONFIG.timer){clearInterval(SYNC_CONFIG.timer);SYNC_CONFIG.timer=null;}
+  SYNC_CONFIG.isRunning=false;
 }
 
-async function autoSyncData() {
-  const hasOpenModal = Array.from(document.querySelectorAll('.modal-overlay')).some(m => !m.classList.contains('hidden'));
-  if (hasOpenModal) {
-    console.log('⏭️ Sync omitido: modal abierto');
-    return;
-  }
-  
-  try {
-    const oldData = {
-      tareas: cache.tareas.length,
-      causas: cache.causas.length,
-      registros: cache.registros.length,
-      gastos: cache.gastos.length,
-      eventos: cache.eventos.length,
-      tramites: cache.tramites.length
-    };
-    
-    const [t, c, r, g, e, tr] = await Promise.all([
-      DB.get('crm_tareas'), DB.get('crm_causas'), DB.get('crm_registros'),
-      DB.get('crm_gastos'), DB.get('crm_eventos'), DB.get('crm_tramites')
-    ]);
-    
-    const hasChanges = 
-      t.length !== oldData.tareas ||
-      c.length !== oldData.causas ||
-      r.length !== oldData.registros ||
-      g.length !== oldData.gastos ||
-      e.length !== oldData.eventos ||
-      tr.length !== oldData.tramites;
-    
-    if (hasChanges) {
-      cache.tareas = t || [];
-      cache.causas = c || [];
-      cache.registros = r || [];
-      cache.gastos = g || [];
-      cache.eventos = e || [];
-      cache.tramites = tr || [];
-      
-      refreshCurrentScreen();
-      updateStats();
-      renderCal();
-      
-      setSyncStatus('success', '✓ Actualizado');
-      console.log('✅ Datos sincronizados - cambios detectados');
-    } else {
-      setSyncStatus('idle', '');
-      console.log('ℹ️ Sin cambios');
-    }
-    
-    SYNC_CONFIG.lastSync = new Date();
-    updateSyncTimestamp();
-    
-  } catch (e) {
-    console.error('❌ Error en auto-sync:', e);
-    setSyncStatus('error', '⚠ Error');
-  }
+async function autoSyncData(){
+  const hasOpenModal=Array.from(document.querySelectorAll('.modal-overlay')).some(m=>!m.classList.contains('hidden'));
+  if(hasOpenModal)return;
+  try{
+    const old={tareas:cache.tareas.length,causas:cache.causas.length,registros:cache.registros.length,gastos:cache.gastos.length,eventos:cache.eventos.length,tramites:cache.tramites.length};
+    const[t,c,r,g,e,tr]=await Promise.all([DB.get('crm_tareas'),DB.get('crm_causas'),DB.get('crm_registros'),DB.get('crm_gastos'),DB.get('crm_eventos'),DB.get('crm_tramites')]);
+    const hasChanges=t.length!==old.tareas||c.length!==old.causas||r.length!==old.registros||g.length!==old.gastos||e.length!==old.eventos||tr.length!==old.tramites;
+    if(hasChanges){
+      cache.tareas=t||[];cache.causas=c||[];cache.registros=r||[];cache.gastos=g||[];cache.eventos=e||[];cache.tramites=tr||[];
+      refreshCurrentScreen();updateStats();renderCal();
+      setSyncStatus('success','✓ Actualizado');
+    }else{setSyncStatus('idle','');}
+    SYNC_CONFIG.lastSync=new Date();updateSyncTimestamp();
+  }catch(e){setSyncStatus('error','⚠ Error');}
 }
 
-function setSyncStatus(state, text) {
-  const indicator = document.getElementById('syncIndicator');
-  const textEl = document.getElementById('syncText');
-  
-  indicator.className = 'sync-indicator';
-  
-  switch(state) {
+function setSyncStatus(state,text){
+  const indicator=document.getElementById('syncIndicator');
+  const textEl=document.getElementById('syncText');
+  indicator.className='sync-indicator';
+  switch(state){
     case 'syncing':
       indicator.classList.add('syncing');
-      textEl.innerHTML = '<div class="sync-spinner"></div><span>Sincronizando...</span>';
+      textEl.innerHTML='<div class="sync-spinner"></div><span>Sincronizando...</span>';
       break;
     case 'success':
       indicator.classList.add('success');
-      textEl.textContent = text;
-      setTimeout(() => {
-        if (textEl.textContent === text) {
-          textEl.textContent = '';
-          indicator.className = 'sync-indicator';
-        }
-      }, 3000);
+      textEl.textContent=text;
+      setTimeout(()=>{if(textEl.textContent===text){textEl.textContent='';indicator.className='sync-indicator';}},3000);
       break;
     case 'error':
-      indicator.classList.add('error');
-      textEl.textContent = text;
-      break;
-    case 'idle':
+      indicator.classList.add('error');textEl.textContent=text;break;
     default:
-      textEl.textContent = text;
-      break;
+      textEl.textContent=text;break;
   }
 }
 
-function updateSyncTimestamp() {
-  if (!SYNC_CONFIG.lastSync) return;
-  
-  const now = new Date();
-  const diff = Math.floor((now - SYNC_CONFIG.lastSync) / 1000);
-  
-  let timeText;
-  if (diff < 60) {
-    timeText = 'hace ' + diff + 's';
-  } else if (diff < 3600) {
-    timeText = 'hace ' + Math.floor(diff / 60) + 'm';
-  } else {
-    timeText = SYNC_CONFIG.lastSync.toLocaleTimeString('es-AR', {hour: '2-digit', minute: '2-digit'});
-  }
-  
-  const statusEl = document.getElementById('sidebarSyncStatus');
-  if (statusEl) {
-    statusEl.innerHTML = `<span>Última actualización: ${timeText}</span>`;
-  }
+function updateSyncTimestamp(){
+  if(!SYNC_CONFIG.lastSync)return;
+  const diff=Math.floor((new Date()-SYNC_CONFIG.lastSync)/1000);
+  const timeText=diff<60?'hace '+diff+'s':diff<3600?'hace '+Math.floor(diff/60)+'m':SYNC_CONFIG.lastSync.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
+  const el=document.getElementById('sidebarSyncStatus');
+  if(el)el.innerHTML=`<span>Última actualización: ${timeText}</span>`;
 }
 
-async function manualSync() {
-  setSyncStatus('syncing', '');
-  
-  try {
-    await loadAll();
-    refreshCurrentScreen();
-    updateStats();
-    renderCal();
-    
-    SYNC_CONFIG.lastSync = new Date();
-    updateSyncTimestamp();
-    setSyncStatus('success', '✓ Sincronizado');
-    
-    console.log('✅ Sincronización manual completada');
-  } catch (e) {
-    console.error('❌ Error en sincronización manual:', e);
-    setSyncStatus('error', '⚠ Error al sincronizar');
-  }
-}
-
-function refreshCurrentScreen() {
-  const activeScreen = document.querySelector('.screen.active');
-  if (!activeScreen) return;
-  
-  const screenId = activeScreen.id.replace('screen-', '');
-  
-  switch(screenId) {
-    case 'tareas':
-      renderTareas();
-      break;
-    case 'registro':
-      const activeTab = document.querySelector('#screen-registro .tab.active');
-      const tabText = activeTab ? activeTab.textContent.trim() : 'Todos';
-      const filtro = tabText === 'Todos' ? null : tabText;
-      renderRegistros(filtro);
-      break;
-    case 'gastos':
-      populateCausaSelects();
-      renderGastos();
-      renderTramites();
-      break;
-    case 'causas':
-      renderCausas();
-      break;
-    case 'causa-detail':
-      const causaId = document.getElementById('causaDetailContent').dataset.causaId;
-      if (causaId) showCausaDetail(causaId);
-      break;
-  }
-}
-
-setInterval(updateSyncTimestamp, 60000);
-  
-async function loadAll(){
-  setSyncStatus('syncing', '');
+async function manualSync(){
+  setSyncStatus('syncing','');
   try{
-    const[t,c,r,g,e,tr]=await Promise.all([
-      DB.get('crm_tareas'),DB.get('crm_causas'),DB.get('crm_registros'),
-      DB.get('crm_gastos'),DB.get('crm_eventos'),DB.get('crm_tramites')
-    ]);
-    cache.tareas=t||[];cache.causas=c||[];cache.registros=r||[];
-    cache.gastos=g||[];cache.eventos=e||[];
-    if(!tr||tr.length===0){
-      await seedTramites();
-    }else{
-      cache.tramites=tr;
-    }
-    setSyncStatus('idle', '');
-    return true;
-  }catch(e){
-    setSyncStatus('error', '⚠ Sin conexión');
-    console.error(e);
-    return false;
+    await loadAll();refreshCurrentScreen();updateStats();renderCal();
+    SYNC_CONFIG.lastSync=new Date();updateSyncTimestamp();setSyncStatus('success','✓ Sincronizado');
+  }catch(e){setSyncStatus('error','⚠ Error al sincronizar');}
+}
+
+function refreshCurrentScreen(){
+  const activeScreen=document.querySelector('.screen.active');if(!activeScreen)return;
+  const screenId=activeScreen.id.replace('screen-','');
+  switch(screenId){
+    case 'tareas':renderTareas();break;
+    case 'registro':const activeTab=document.querySelector('#screen-registro .tab.active');renderRegistros(activeTab&&activeTab.textContent.trim()!=='Todos'?activeTab.textContent.trim():null);break;
+    case 'gastos':populateCausaSelects();renderGastos();renderTramites();break;
+    case 'causas':renderCausas();break;
+    case 'causa-detail':const causaId=document.getElementById('causaDetailContent').dataset.causaId;if(causaId)showCausaDetail(causaId);break;
   }
 }
-  
+
+setInterval(updateSyncTimestamp,60000);
+
+async function loadAll(){
+  setSyncStatus('syncing','');
+  try{
+    const[t,c,r,g,e,tr]=await Promise.all([DB.get('crm_tareas'),DB.get('crm_causas'),DB.get('crm_registros'),DB.get('crm_gastos'),DB.get('crm_eventos'),DB.get('crm_tramites')]);
+    cache.tareas=t||[];cache.causas=c||[];cache.registros=r||[];cache.gastos=g||[];cache.eventos=e||[];
+    if(!tr||tr.length===0){await seedTramites();}else{cache.tramites=tr;}
+    setSyncStatus('idle','');return true;
+  }catch(e){setSyncStatus('error','⚠ Sin conexión');console.error(e);return false;}
+}
+
 async function seedTramites(){
   const defaults=getTramitesDefault();
-  for(const t of defaults){
-    try{await DB.insert('crm_tramites',{id:t.id,nombre:t.n,precio:t.p,orden:defaults.indexOf(t)});}catch{}
-  }
+  for(const t of defaults){try{await DB.insert('crm_tramites',{id:t.id,nombre:t.n,precio:t.p,orden:defaults.indexOf(t)});}catch{}}
   cache.tramites=await DB.get('crm_tramites');
-}
-
-function setSyncStatus(msg){
-  const el=document.getElementById('syncStatus');
-  if(el)el.textContent=msg;
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -974,34 +855,20 @@ function showErr(msg){alert('Error: '+msg);}
 // ══════════════════════════════════════════════════════════════
 // MOBILE SIDEBAR
 // ══════════════════════════════════════════════════════════════
-function toggleSidebar(){
-  document.getElementById('sidebar').classList.toggle('open');
-  document.getElementById('sidebarOverlay').classList.toggle('open');
-}
-function closeSidebar(){
-  document.getElementById('sidebar').classList.remove('open');
-  document.getElementById('sidebarOverlay').classList.remove('open');
-}
+function toggleSidebar(){document.getElementById('sidebar').classList.toggle('open');document.getElementById('sidebarOverlay').classList.toggle('open');}
+function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sidebarOverlay').classList.remove('open');}
 
 // ══════════════════════════════════════════════════════════════
 // CALENDAR
 // ══════════════════════════════════════════════════════════════
 let calYear=new Date().getFullYear(),calMonth=new Date().getMonth(),calSelected=dateFmt(new Date());
 function calNav(dir){calMonth+=dir;if(calMonth>11){calMonth=0;calYear++;}if(calMonth<0){calMonth=11;calYear--;}renderCal();}
-function getDayEvents(ds){
-  return{
-    tareas:cache.tareas.filter(t=>t.vencimiento===ds&&t.estado!=='completada'),
-    eventos:cache.eventos.filter(e=>e.fecha===ds),
-    registros:cache.registros.filter(r=>r.vencimiento_fecha===ds)
-  };
-}
+function getDayEvents(ds){return{tareas:cache.tareas.filter(t=>t.vencimiento===ds&&t.estado!=='completada'),eventos:cache.eventos.filter(e=>e.fecha===ds),registros:cache.registros.filter(r=>r.vencimiento_fecha===ds)};}
 function renderCal(){
   const todayStr=dateFmt(new Date());
   document.getElementById('calMonth').textContent=`${MESES_CORTOS[calMonth]} ${calYear}`;
-  const firstDay=new Date(calYear,calMonth,1);
-  const lastDay=new Date(calYear,calMonth+1,0);
-  const startDow=(firstDay.getDay()+6)%7;
-  const totalDays=lastDay.getDate();
+  const firstDay=new Date(calYear,calMonth,1);const lastDay=new Date(calYear,calMonth+1,0);
+  const startDow=(firstDay.getDay()+6)%7;const totalDays=lastDay.getDate();
   const dows=['L','M','X','J','V','S','D'];
   let html=dows.map(d=>`<div class="cal-dow">${d}</div>`).join('');
   const prevLast=new Date(calYear,calMonth,0).getDate();
@@ -1021,45 +888,30 @@ function renderCal(){
 }
 function calSelectDay(ds){calSelected=ds;renderCal();}
 function renderCalAgenda(ds){
-  const d=new Date(ds+'T12:00:00');
-  const todayStr=dateFmt(new Date());
+  const d=new Date(ds+'T12:00:00');const todayStr=dateFmt(new Date());
   document.getElementById('calAgendaTitle').textContent=ds===todayStr?'HOY':`${d.getDate()} ${MESES_CORTOS[d.getMonth()].toUpperCase()}`;
   const{tareas,eventos,registros}=getDayEvents(ds);
-  const el=document.getElementById('calAgendaList');
-  const all=[];
+  const el=document.getElementById('calAgendaList');const all=[];
   eventos.forEach(e=>all.push({label:`${e.hora?e.hora+' — ':''}${e.descripcion}`,cls:'ev-'+e.tipo}));
   tareas.forEach(t=>all.push({label:`✅ ${t.titulo}`,cls:'ev-urgente'}));
   registros.forEach(r=>all.push({label:`⏰ ${(r.novedad||'').substring(0,38)}`,cls:'ev-venc'}));
-  if(!all.length){
-    el.innerHTML=`<div class="cal-event-empty">Sin eventos</div><div style="text-align:center;margin-top:.4rem;"><button class="btn btn-ghost btn-xs" style="color:#6a6058;border-color:#3a3830;font-size:.63rem;" onclick="openModalEvento('${ds}')">+ Agregar</button></div>`;
-    return;
-  }
-  el.innerHTML=all.map(a=>`<div class="cal-event ${a.cls}">${a.label}</div>`).join('')
-    +`<div style="text-align:center;margin-top:.35rem;"><button class="btn btn-ghost btn-xs" style="color:#6a6058;border-color:#3a3830;font-size:.63rem;" onclick="openModalEvento('${ds}')">+ Agregar</button></div>`;
+  if(!all.length){el.innerHTML=`<div class="cal-event-empty">Sin eventos</div><div style="text-align:center;margin-top:.4rem;"><button class="btn btn-ghost btn-xs" style="color:#6a6058;border-color:#3a3830;font-size:.63rem;" onclick="openModalEvento('${ds}')">+ Agregar</button></div>`;return;}
+  el.innerHTML=all.map(a=>`<div class="cal-event ${a.cls}">${a.label}</div>`).join('')+`<div style="text-align:center;margin-top:.35rem;"><button class="btn btn-ghost btn-xs" style="color:#6a6058;border-color:#3a3830;font-size:.63rem;" onclick="openModalEvento('${ds}')">+ Agregar</button></div>`;
 }
 function openModalEvento(fechaPre){
   populateCausaSelectEl('evento_causa');
-  document.getElementById('evento_id').value='';
-  document.getElementById('mEventoTitle').textContent='Nuevo Evento';
-  document.getElementById('evento_desc').value='';
-  document.getElementById('evento_fecha').value=fechaPre||calSelected||dateFmt(new Date());
-  document.getElementById('evento_hora').value='09:00';
-  document.getElementById('evento_tipo').value='audiencia';
-  document.getElementById('evento_causa').value='';
+  document.getElementById('evento_id').value='';document.getElementById('mEventoTitle').textContent='Nuevo Evento';
+  document.getElementById('evento_desc').value='';document.getElementById('evento_fecha').value=fechaPre||calSelected||dateFmt(new Date());
+  document.getElementById('evento_hora').value='09:00';document.getElementById('evento_tipo').value='audiencia';document.getElementById('evento_causa').value='';
   openModal('modalEvento');
 }
 async function saveEvento(){
-  const desc=document.getElementById('evento_desc').value.trim();
-  const fecha=document.getElementById('evento_fecha').value;
+  const desc=document.getElementById('evento_desc').value.trim();const fecha=document.getElementById('evento_fecha').value;
   if(!desc||!fecha)return alert('Complete descripción y fecha.');
-  const ev={id:uid(),descripcion:desc,fecha,hora:document.getElementById('evento_hora').value,
-    tipo:document.getElementById('evento_tipo').value,causa:document.getElementById('evento_causa').value||null};
+  const ev={id:uid(),descripcion:desc,fecha,hora:document.getElementById('evento_hora').value,tipo:document.getElementById('evento_tipo').value,causa:document.getElementById('evento_causa').value||null};
   try{
-    await DB.insert('crm_eventos',ev);
-    cache.eventos.push(ev);
-    closeModal('modalEvento');
-    const d=new Date(fecha+'T12:00:00');calYear=d.getFullYear();calMonth=d.getMonth();calSelected=fecha;
-    renderCal();
+    await DB.insert('crm_eventos',ev);cache.eventos.push(ev);closeModal('modalEvento');
+    const d=new Date(fecha+'T12:00:00');calYear=d.getFullYear();calMonth=d.getMonth();calSelected=fecha;renderCal();
   }catch(e){showErr(e.message);}
 }
 
@@ -1067,8 +919,7 @@ async function saveEvento(){
 // PRINT: TAREAS
 // ══════════════════════════════════════════════════════════════
 function printTareas(){
-  const tareas=cache.tareas;
-  const co={urgente:0,alta:1,normal:2,baja:3};
+  const tareas=cache.tareas;const co={urgente:0,alta:1,normal:2,baja:3};
   const activos=[...tareas.filter(t=>t.estado!=='completada')].sort((a,b)=>(co[a.criticidad]||2)-(co[b.criticidad]||2));
   const archivo=tareas.filter(t=>t.estado==='completada');
   const fechaImp=new Date().toLocaleDateString('es-AR',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
@@ -1077,10 +928,7 @@ function printTareas(){
     return`<div class="pt-section">${titulo} (${arr.length})</div>`+arr.map(t=>`
       <div class="pt-row">
         <span class="checkbox"></span><span class="pt-dot ${t.criticidad||'normal'}"></span>
-        <div style="flex:1;min-width:0;">
-          <div class="pt-title">${t.titulo}</div>
-          ${t.notas?`<div class="pt-notas">${t.notas}</div>`:''}
-        </div>
+        <div style="flex:1;min-width:0;"><div class="pt-title">${t.titulo}</div>${t.notas?`<div class="pt-notas">${t.notas}</div>`:''}</div>
         ${t.causa?`<span class="pt-causa">${getCNombre(t.causa)}</span>`:''}
         ${t.vencimiento?`<span class="pt-venc">Vence: ${fmtF(t.vencimiento)}</span>`:''}
         <span class="pt-badge ${t.criticidad||'normal'}">${{urgente:'URGENTE',alta:'ALTA',normal:'NORMAL',baja:'BAJA'}[t.criticidad||'normal']}</span>
@@ -1092,10 +940,8 @@ function printTareas(){
   const noIniciadas=activos.filter(t=>t.criticidad!=='urgente'&&t.estado==='no-iniciada');
   document.getElementById('printTareas').innerHTML=`
     <div class="pt-header">
-      <div><div class="pt-logo">I|A <span>ARIGÓS ABOGADO</span></div>
-        <div style="font-size:8pt;color:#555;margin-top:3pt;">TE: 1154737787 · ignacioarigos@gmail.com</div></div>
-      <div class="pt-meta"><div style="font-size:13pt;font-weight:700;">LISTA DE TAREAS</div>
-        <div>${fechaImp}</div><div>Activas: ${activos.length} · Completadas: ${archivo.length}</div></div>
+      <div><div class="pt-logo">I|A <span>ARIGÓS ABOGADO</span></div><div style="font-size:8pt;color:#555;margin-top:3pt;">TE: 1154737787 · ignacioarigos@gmail.com</div></div>
+      <div class="pt-meta"><div style="font-size:13pt;font-weight:700;">LISTA DE TAREAS</div><div>${fechaImp}</div><div>Activas: ${activos.length} · Completadas: ${archivo.length}</div></div>
     </div>
     ${seccion(urgentes,'🔴 URGENTES')}${seccion(enCurso,'🔄 EN CURSO')}${seccion(noIniciadas,'⬜ NO INICIADAS')}
     ${archivo.length?`<div class="pt-section">✅ ARCHIVO (${archivo.length})</div>`+archivo.map(t=>`<div class="pt-row" style="opacity:.5;"><span class="checkbox" style="background:#ccc;"></span><div class="pt-title" style="text-decoration:line-through;">${t.titulo}</div></div>`).join(''):''}
@@ -1108,29 +954,19 @@ function printTareas(){
 // PRINT: GASTOS
 // ══════════════════════════════════════════════════════════════
 function printGastos(forceCausaId){
-  let gastos=cache.gastos;
-  const filtro=forceCausaId||document.getElementById('filtroGastoCausa')?.value;
+  let gastos=cache.gastos;const filtro=forceCausaId||document.getElementById('filtroGastoCausa')?.value;
   if(filtro)gastos=gastos.filter(g=>g.causa===filtro);
   if(!gastos.length)return alert('No hay gastos para imprimir.');
-  const now=new Date();
-  const fechaImp=now.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
-  const byCausa={};
-  gastos.forEach(g=>{const k=g.causa||'__general';if(!byCausa[k])byCausa[k]=[];byCausa[k].push(g);});
+  const now=new Date();const fechaImp=now.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
+  const byCausa={};gastos.forEach(g=>{const k=g.causa||'__general';if(!byCausa[k])byCausa[k]=[];byCausa[k].push(g);});
   let planillasHTML='';
   Object.entries(byCausa).forEach(([causaId,items],idx)=>{
     const c=causaId!=='__general'?cache.causas.find(x=>x.id===causaId):null;
-    const subTot=items.reduce((s,g)=>s+(g.total||0),0);
-    const ppto=c?.presupuesto||null;
-    const saldo=ppto?ppto-subTot:null;
-    planillasHTML+=`
-    ${idx>0?'<div style="page-break-before:always;"></div>':''}
+    const subTot=items.reduce((s,g)=>s+(g.total||0),0);const ppto=c?.presupuesto||null;const saldo=ppto?ppto-subTot:null;
+    planillasHTML+=`${idx>0?'<div style="page-break-before:always;"></div>':''}
     <div class="pg-outer">
-      <div class="pg-head">
-        <div><div class="pg-head-logo">I|A</div>
-          <div style="font-size:9pt;color:#ccc;margin-top:3pt;">IGNACIO ARIGÓS — ABOGADO</div>
-          <div style="font-size:8pt;color:#aaa;margin-top:2pt;">TE: 1154737787 · ignacioarigos@gmail.com</div></div>
-        <div class="pg-head-info"><strong>PLANILLA DE GASTOS</strong><br>Fecha: ${fechaImp}<br>Nro: ${String(idx+1).padStart(4,'0')}</div>
-      </div>
+      <div class="pg-head"><div><div class="pg-head-logo">I|A</div><div style="font-size:9pt;color:#ccc;margin-top:3pt;">IGNACIO ARIGÓS — ABOGADO</div><div style="font-size:8pt;color:#aaa;margin-top:2pt;">TE: 1154737787 · ignacioarigos@gmail.com</div></div>
+        <div class="pg-head-info"><strong>PLANILLA DE GASTOS</strong><br>Fecha: ${fechaImp}<br>Nro: ${String(idx+1).padStart(4,'0')}</div></div>
       <div class="pg-strip"><span>DETALLE DE GASTOS JUDICIALES</span><span>${c?c.tribunal+' — '+c.fuero:'GENERAL'}</span></div>
       <div class="pg-body">
         <div class="pg-causa-box">
@@ -1139,8 +975,7 @@ function printGastos(forceCausaId){
           <div class="pg-causa-field"><div class="pg-causa-label">Cliente</div><div class="pg-causa-val small">${c?.cliente||'—'}</div></div>
           <div class="pg-causa-field"><div class="pg-causa-label">Juzgado</div><div class="pg-causa-val small">${c?.juzgado||'—'}</div></div>
         </div>
-        <table>
-          <thead><tr><th style="width:25pt;">#</th><th>Trámite / Concepto</th><th class="r" style="width:35pt;">Cant.</th><th class="r" style="width:65pt;">P. Unit.</th><th class="r" style="width:75pt;">Total</th><th style="width:50pt;">Fecha</th></tr></thead>
+        <table><thead><tr><th style="width:25pt;">#</th><th>Trámite / Concepto</th><th class="r" style="width:35pt;">Cant.</th><th class="r" style="width:65pt;">P. Unit.</th><th class="r" style="width:75pt;">Total</th><th style="width:50pt;">Fecha</th></tr></thead>
           <tbody>${items.map((g,i)=>`<tr><td>${i+1}</td><td>${g.tramite_nombre}</td><td class="r">${g.cant}</td><td class="r">$ ${(g.precio_u||0).toLocaleString('es-AR')}</td><td class="r"><strong>$ ${(g.total||0).toLocaleString('es-AR')}</strong></td><td>${g.fecha?fmtF(g.fecha):'-'}</td></tr>`).join('')}</tbody>
           <tbody class="pg-totals">
             <tr><td colspan="4" style="text-align:right;font-weight:700;padding:5pt 8pt;">SUBTOTAL</td><td class="r" style="padding:5pt 8pt;font-weight:700;">$ ${subTot.toLocaleString('es-AR')}</td><td></td></tr>
@@ -1153,16 +988,14 @@ function printGastos(forceCausaId){
       <div class="pg-firma"><div class="pg-firma-box">Firma y sello del profesional</div></div>
     </div><br>`;
   });
-  document.getElementById('printGastos').innerHTML=planillasHTML;
-  document.getElementById('printTareas').innerHTML='';
+  document.getElementById('printGastos').innerHTML=planillasHTML;document.getElementById('printTareas').innerHTML='';
   printZoneShow('printGastos');
 }
 function printGastosById(causaId){printGastos(causaId);}
 function printZoneShow(activeId){
   const pz=document.getElementById('printZone');
   ['printTareas','printGastos'].forEach(id=>{document.getElementById(id).style.display=id===activeId?'block':'none';});
-  pz.style.display='block';
-  requestAnimationFrame(()=>{window.print();setTimeout(()=>{pz.style.display='none';},400);});
+  pz.style.display='block';requestAnimationFrame(()=>{window.print();setTimeout(()=>{pz.style.display='none';},400);});
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -1204,6 +1037,9 @@ function openModalTarea(editId){
   populateCausaSelectEl('tarea_causa');
   document.getElementById('tarea_id').value=editId||'';
   document.getElementById('mTareaTitle').textContent=editId?'Editar Tarea':'Nueva Tarea';
+  // Resetear botón por si quedó bloqueado
+  const btn=document.getElementById('btnGuardarTarea');
+  btn.disabled=false;btn.textContent='Guardar';
   if(editId){
     const t=cache.tareas.find(x=>x.id===editId);if(!t)return;
     document.getElementById('tarea_titulo').value=t.titulo||'';
@@ -1219,19 +1055,29 @@ function openModalTarea(editId){
   openModal('modalTarea');
 }
 function onVencTarea(){if(document.getElementById('tarea_vencimiento').value)document.getElementById('tarea_crit').value='urgente';}
+
+// FIX: protección anti-doble-click en guardar tarea
 async function saveTarea(){
-  const titulo=document.getElementById('tarea_titulo').value.trim();if(!titulo)return alert('Ingrese un título.');
-  const editId=document.getElementById('tarea_id').value;
-  const venc=document.getElementById('tarea_vencimiento').value||null;
-  const crit=venc?'urgente':document.getElementById('tarea_crit').value;
-  const existing=cache.tareas.find(x=>x.id===editId);
-  const obj={id:editId||uid(),titulo,causa:document.getElementById('tarea_causa').value||null,criticidad:crit,vencimiento:venc,estado:document.getElementById('tarea_estado').value,notas:document.getElementById('tarea_notas').value.trim()||null,fecha:existing?.fecha||new Date().toISOString()};
+  const btn=document.getElementById('btnGuardarTarea');
+  if(btn.disabled)return;
+  btn.disabled=true;btn.textContent='Guardando...';
   try{
+    const titulo=document.getElementById('tarea_titulo').value.trim();
+    if(!titulo){alert('Ingrese un título.');return;}
+    const editId=document.getElementById('tarea_id').value;
+    const venc=document.getElementById('tarea_vencimiento').value||null;
+    const crit=venc?'urgente':document.getElementById('tarea_crit').value;
+    const existing=cache.tareas.find(x=>x.id===editId);
+    const obj={id:editId||uid(),titulo,causa:document.getElementById('tarea_causa').value||null,criticidad:crit,vencimiento:venc,estado:document.getElementById('tarea_estado').value,notas:document.getElementById('tarea_notas').value.trim()||null,fecha:existing?.fecha||new Date().toISOString()};
     if(editId&&existing){await DB.update('crm_tareas',editId,obj);const i=cache.tareas.findIndex(x=>x.id===editId);cache.tareas[i]=obj;}
     else{await DB.insert('crm_tareas',obj);cache.tareas.push(obj);}
     closeModal('modalTarea');renderTareas();updateStats();renderCal();
-  }catch(e){showErr(e.message);}
+  }catch(e){
+    showErr(e.message);
+    btn.disabled=false;btn.textContent='Guardar';
+  }
 }
+
 function renderTareas(){
   const co={urgente:0,alta:1,normal:2,baja:3};
   const srt=arr=>[...arr].sort((a,b)=>(co[a.criticidad]||2)-(co[b.criticidad]||2));
@@ -1297,7 +1143,9 @@ async function revertirTarea(id){
 }
 async function delTarea(id){
   if(!confirm('¿Eliminar tarea?'))return;
-  await DB.delete('crm_tareas',id);cache.tareas=cache.tareas.filter(t=>t.id!==id);renderTareas();updateStats();renderCal();
+  await DB.delete('crm_tareas',id);
+  cache.tareas=cache.tareas.filter(t=>t.id!==id);
+  renderTareas();updateStats();renderCal();
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -1307,56 +1155,36 @@ function openModalRegistro(causaId){
   populateCausaSelectEl('reg_causa');
   if(causaId)document.getElementById('reg_causa').value=causaId;
   ['reg_portal','reg_novedad','reg_estrategia'].forEach(i=>{const el=document.getElementById(i);if(el)el.value='';});
-  document.getElementById('reg_tieneVenc').checked=false;
-  document.getElementById('vencimientoSection').style.display='none';
-  document.getElementById('vencimientoResult').style.display='none';
-  document.getElementById('reg_diasPlazo').value='';
-  document.getElementById('reg_fechaInicio').value=dateFmt(new Date());
-  document.getElementById('feriadosApiNote').textContent='';
-  document.getElementById('reg_crearTarea').checked=false;
-  document.getElementById('crearTareaSection').style.display='none';
-  document.getElementById('reg_tareaTitulo').value='';
-  delete document.getElementById('vencimientoResult')._vf;
+  document.getElementById('reg_tieneVenc').checked=false;document.getElementById('vencimientoSection').style.display='none';
+  document.getElementById('vencimientoResult').style.display='none';document.getElementById('reg_diasPlazo').value='';
+  document.getElementById('reg_fechaInicio').value=dateFmt(new Date());document.getElementById('feriadosApiNote').textContent='';
+  document.getElementById('reg_crearTarea').checked=false;document.getElementById('crearTareaSection').style.display='none';
+  document.getElementById('reg_tareaTitulo').value='';delete document.getElementById('vencimientoResult')._vf;
   openModal('modalRegistro');
 }
 function toggleCrearTarea(){document.getElementById('crearTareaSection').style.display=document.getElementById('reg_crearTarea').checked?'block':'none';}
 function toggleVencimiento(){const s=document.getElementById('reg_tieneVenc').checked;document.getElementById('vencimientoSection').style.display=s?'block':'none';if(!s)document.getElementById('vencimientoResult').style.display='none';}
 function updatePlazoInfo(){const p=document.getElementById('reg_portal').value;document.getElementById('plazoTipoLabel').textContent=p==='SCBA'?'días corridos':'días hábiles';calcularVencimiento();}
 async function calcularVencimiento(){
-  const dias=parseInt(document.getElementById('reg_diasPlazo').value);
-  const fs=document.getElementById('reg_fechaInicio').value;
-  const portal=document.getElementById('reg_portal').value;
-  const res=document.getElementById('vencimientoResult');
-  const note=document.getElementById('feriadosApiNote');
+  const dias=parseInt(document.getElementById('reg_diasPlazo').value);const fs=document.getElementById('reg_fechaInicio').value;const portal=document.getElementById('reg_portal').value;
+  const res=document.getElementById('vencimientoResult');const note=document.getElementById('feriadosApiNote');
   if(!dias||!fs||!portal){res.style.display='none';return;}
   res.style.display='block';res.textContent='⏳ Calculando...';note.textContent='';
   try{
-    const desde=new Date(fs+'T12:00:00');
-    const vd=portal==='SCBA'?await sumarCorridos(desde,dias):await sumarHabiles(desde,dias);
-    const txt=`Vence el ${fechaLarga(vd)}`;
-    res.textContent=txt;res._vf=dateFmt(vd);res._txt=txt;
+    const desde=new Date(fs+'T12:00:00');const vd=portal==='SCBA'?await sumarCorridos(desde,dias):await sumarHabiles(desde,dias);
+    const txt=`Vence el ${fechaLarga(vd)}`;res.textContent=txt;res._vf=dateFmt(vd);res._txt=txt;
     const cacheYear=feriadosCache[vd.getFullYear()];
     note.textContent=cacheYear&&cacheYear.size>10?'✅ Feriados API':'⚠ Feriados locales';
     note.className='api-notice '+(cacheYear&&cacheYear.size>10?'ok':'err');
   }catch(e){res.textContent='Error al calcular';console.error(e);}
 }
 async function saveRegistro(){
-  const portal=document.getElementById('reg_portal').value;
-  const novedad=document.getElementById('reg_novedad').value.trim();
+  const portal=document.getElementById('reg_portal').value;const novedad=document.getElementById('reg_novedad').value.trim();
   if(!portal||!novedad)return alert('Complete portal y novedad.');
-  const tieneVenc=document.getElementById('reg_tieneVenc').checked;
-  const resEl=document.getElementById('vencimientoResult');
-  const obj={
-    id:uid(),portal,causa:document.getElementById('reg_causa').value||null,
-    novedad,estrategia:document.getElementById('reg_estrategia').value.trim()||null,
-    tiene_vencimiento:tieneVenc,
-    vencimiento_fecha:tieneVenc&&resEl._vf?resEl._vf:null,
-    vencimiento_texto:tieneVenc&&resEl._txt?resEl._txt:null,
-    fecha:new Date().toISOString()
-  };
+  const tieneVenc=document.getElementById('reg_tieneVenc').checked;const resEl=document.getElementById('vencimientoResult');
+  const obj={id:uid(),portal,causa:document.getElementById('reg_causa').value||null,novedad,estrategia:document.getElementById('reg_estrategia').value.trim()||null,tiene_vencimiento:tieneVenc,vencimiento_fecha:tieneVenc&&resEl._vf?resEl._vf:null,vencimiento_texto:tieneVenc&&resEl._txt?resEl._txt:null,fecha:new Date().toISOString()};
   try{
-    await DB.insert('crm_registros',obj);
-    cache.registros.push(obj);
+    await DB.insert('crm_registros',obj);cache.registros.push(obj);
     if(document.getElementById('reg_crearTarea').checked){
       const tituloT=document.getElementById('reg_tareaTitulo').value.trim()||novedad.substring(0,80);
       const tarea={id:uid(),titulo:tituloT,causa:obj.causa,criticidad:tieneVenc&&resEl._vf?'urgente':'normal',vencimiento:tieneVenc&&resEl._vf?resEl._vf:null,estado:'no-iniciada',notas:obj.estrategia||null,fecha:new Date().toISOString()};
@@ -1366,9 +1194,7 @@ async function saveRegistro(){
   }catch(e){showErr(e.message);}
 }
 function renderRegistros(filtroPortal){
-  let list=cache.registros;
-  if(filtroPortal)list=list.filter(r=>r.portal===filtroPortal);
-  list=[...list].reverse();
+  let list=cache.registros;if(filtroPortal)list=list.filter(r=>r.portal===filtroPortal);list=[...list].reverse();
   const el=document.getElementById('listRegistros');
   if(!list.length){el.innerHTML='<div class="empty-state"><div class="icon">📋</div><p>Sin registros</p></div>';return;}
   el.innerHTML=list.map(r=>`
@@ -1377,11 +1203,7 @@ function renderRegistros(filtroPortal){
       <div class="registro-body">
         <div class="registro-novedad">${r.novedad}</div>
         ${r.estrategia?`<div class="registro-estrategia">💡 ${r.estrategia}</div>`:''}
-        <div class="registro-meta">
-          <span>${fmtF(r.fecha)}</span>
-          ${r.tiene_vencimiento&&r.vencimiento_texto?`<span class="registro-venc">${r.vencimiento_texto}</span>`:''}
-          ${r.causa?`<span>${getCNombre(r.causa)}</span>`:''}
-        </div>
+        <div class="registro-meta"><span>${fmtF(r.fecha)}</span>${r.tiene_vencimiento&&r.vencimiento_texto?`<span class="registro-venc">${r.vencimiento_texto}</span>`:''}${r.causa?`<span>${getCNombre(r.causa)}</span>`:''}</div>
       </div>
       <button class="btn btn-ghost btn-xs" onclick="delRegistro('${r.id}')" style="align-self:flex-start;flex-shrink:0;">🗑</button>
     </div>`).join('');
@@ -1396,43 +1218,24 @@ async function delRegistro(id){
 // ══════════════════════════════════════════════════════════════
 function openModalGasto(editId,causaPreId){
   populateCausaSelectEl('gasto_causa');populateTramiteSelect();
-  document.getElementById('gasto_id').value=editId||'';
-  document.getElementById('mGastoTitle').textContent=editId?'Editar Gasto':'Registrar Gasto';
+  document.getElementById('gasto_id').value=editId||'';document.getElementById('mGastoTitle').textContent=editId?'Editar Gasto':'Registrar Gasto';
   if(editId){
     const g=cache.gastos.find(x=>x.id===editId);if(!g)return;
-    document.getElementById('gasto_causa').value=g.causa||'';
-    document.getElementById('gasto_tramite').value=g.tramite_id||'';
-    document.getElementById('gasto_cant').value=g.cant||1;
-    document.getElementById('gasto_precio').value=g.precio_u||0;
-    document.getElementById('gasto_fecha').value=g.fecha||'';
-    calcTotal();
+    document.getElementById('gasto_causa').value=g.causa||'';document.getElementById('gasto_tramite').value=g.tramite_id||'';
+    document.getElementById('gasto_cant').value=g.cant||1;document.getElementById('gasto_precio').value=g.precio_u||0;
+    document.getElementById('gasto_fecha').value=g.fecha||'';calcTotal();
   }else{
-    document.getElementById('gasto_causa').value=causaPreId||'';
-    document.getElementById('gasto_tramite').value='';
-    document.getElementById('gasto_cant').value=1;
-    document.getElementById('gasto_precio').value='';
-    document.getElementById('gasto_total').value='';
-    document.getElementById('gasto_fecha').value=dateFmt(new Date());
+    document.getElementById('gasto_causa').value=causaPreId||'';document.getElementById('gasto_tramite').value='';
+    document.getElementById('gasto_cant').value=1;document.getElementById('gasto_precio').value='';
+    document.getElementById('gasto_total').value='';document.getElementById('gasto_fecha').value=dateFmt(new Date());
   }
   openModal('modalGasto');
 }
-function autoFillPrecio(){
-  const sel=document.getElementById('gasto_tramite');
-  const opt=sel.options[sel.selectedIndex];
-  const p=opt?.dataset?.p;
-  if(p){document.getElementById('gasto_precio').value=p;calcTotal();}
-}
-function calcTotal(){
-  const c=parseFloat(document.getElementById('gasto_cant').value)||0;
-  const p=parseFloat(document.getElementById('gasto_precio').value)||0;
-  document.getElementById('gasto_total').value='$'+((c*p)).toLocaleString('es-AR');
-}
+function autoFillPrecio(){const sel=document.getElementById('gasto_tramite');const opt=sel.options[sel.selectedIndex];const p=opt?.dataset?.p;if(p){document.getElementById('gasto_precio').value=p;calcTotal();}}
+function calcTotal(){const c=parseFloat(document.getElementById('gasto_cant').value)||0;const p=parseFloat(document.getElementById('gasto_precio').value)||0;document.getElementById('gasto_total').value='$'+((c*p)).toLocaleString('es-AR');}
 async function saveGasto(){
-  const causaId=document.getElementById('gasto_causa').value||null;
-  const tid=document.getElementById('gasto_tramite').value;if(!tid)return alert('Seleccione un trámite.');
-  const tr=getTramites().find(t=>t.id===tid);
-  const cant=parseFloat(document.getElementById('gasto_cant').value)||1;
-  const precioU=parseFloat(document.getElementById('gasto_precio').value)||0;
+  const causaId=document.getElementById('gasto_causa').value||null;const tid=document.getElementById('gasto_tramite').value;if(!tid)return alert('Seleccione un trámite.');
+  const tr=getTramites().find(t=>t.id===tid);const cant=parseFloat(document.getElementById('gasto_cant').value)||1;const precioU=parseFloat(document.getElementById('gasto_precio').value)||0;
   const editId=document.getElementById('gasto_id').value;
   const obj={id:editId||uid(),causa:causaId,tramite_id:tid,tramite_nombre:tr?tr.n:'—',cant,precio_u:precioU,total:cant*precioU,fecha:document.getElementById('gasto_fecha').value||null};
   try{
@@ -1443,12 +1246,9 @@ async function saveGasto(){
   }catch(e){showErr(e.message);}
 }
 function renderGastos(){
-  let list=cache.gastos;
-  const filtro=document.getElementById('filtroGastoCausa')?.value;
-  if(filtro)list=list.filter(g=>g.causa===filtro);
-  list=[...list].reverse();
-  const tot=list.reduce((s,g)=>s+(g.total||0),0);
-  document.getElementById('totalGastos').textContent='$'+tot.toLocaleString('es-AR');
+  let list=cache.gastos;const filtro=document.getElementById('filtroGastoCausa')?.value;
+  if(filtro)list=list.filter(g=>g.causa===filtro);list=[...list].reverse();
+  const tot=list.reduce((s,g)=>s+(g.total||0),0);document.getElementById('totalGastos').textContent='$'+tot.toLocaleString('es-AR');
   const tb=document.getElementById('tbodyGastos');
   if(!list.length){tb.innerHTML='<tr><td colspan="7" style="text-align:center;padding:1.5rem;color:var(--muted);">Sin gastos</td></tr>';return;}
   tb.innerHTML=list.map(g=>`<tr>
@@ -1467,7 +1267,7 @@ async function delGasto(id){
 }
 
 // ══════════════════════════════════════════════════════════════
-// TRAMITES (Supabase)
+// TRAMITES
 // ══════════════════════════════════════════════════════════════
 function getTramitesDefault(){return[
   {id:'t1',n:'SOLICITUD DE PARTIDA - CABA URGENTE',p:11950},{id:'t2',n:'BÚSQUEDA DE PARTIDA - CABA',p:8110},
@@ -1481,8 +1281,7 @@ function getTramitesDefault(){return[
 function getTramites(){return cache.tramites.map(t=>({id:t.id,n:t.nombre,p:t.precio}));}
 function populateTramiteSelect(){
   const tramites=getTramites();
-  document.getElementById('gasto_tramite').innerHTML='<option value="">— Seleccione trámite —</option>'+
-    tramites.map(t=>`<option value="${t.id}" data-p="${t.p}">${t.n} ($${t.p.toLocaleString('es-AR')})</option>`).join('');
+  document.getElementById('gasto_tramite').innerHTML='<option value="">— Seleccione trámite —</option>'+tramites.map(t=>`<option value="${t.id}" data-p="${t.p}">${t.n} ($${t.p.toLocaleString('es-AR')})</option>`).join('');
 }
 function renderTramites(){
   document.getElementById('listTramites').innerHTML=cache.tramites.map(t=>`
@@ -1504,8 +1303,7 @@ function renderTramites(){
 function editTramite(id){document.getElementById('tview-'+id).style.display='none';document.getElementById('tedit-'+id).style.display='flex';document.getElementById('tinput-n-'+id).focus();}
 function cancelTramiteEdit(id){document.getElementById('tview-'+id).style.display='flex';document.getElementById('tedit-'+id).style.display='none';}
 async function saveTramiteEdit(id){
-  const n=document.getElementById('tinput-n-'+id).value.trim();
-  const p=parseFloat(document.getElementById('tinput-p-'+id).value)||0;
+  const n=document.getElementById('tinput-n-'+id).value.trim();const p=parseFloat(document.getElementById('tinput-p-'+id).value)||0;
   if(!n)return alert('El nombre no puede estar vacío.');
   await DB.update('crm_tramites',id,{nombre:n,precio:p});
   const t=cache.tramites.find(x=>x.id===id);if(t){t.nombre=n;t.precio=p;}
@@ -1513,14 +1311,11 @@ async function saveTramiteEdit(id){
 }
 async function deleteTramite(id){
   if(!confirm('¿Eliminar arancel?'))return;
-  await DB.delete('crm_tramites',id);cache.tramites=cache.tramites.filter(t=>t.id!==id);
-  renderTramites();populateTramiteSelect();
+  await DB.delete('crm_tramites',id);cache.tramites=cache.tramites.filter(t=>t.id!==id);renderTramites();populateTramiteSelect();
 }
 async function addTramite(){
-  const newId='tc'+Date.now().toString(36);
-  const obj={id:newId,nombre:'NUEVO ARANCEL',precio:0,orden:cache.tramites.length};
-  await DB.insert('crm_tramites',obj);cache.tramites.push(obj);
-  renderTramites();setTimeout(()=>editTramite(newId),50);
+  const newId='tc'+Date.now().toString(36);const obj={id:newId,nombre:'NUEVO ARANCEL',precio:0,orden:cache.tramites.length};
+  await DB.insert('crm_tramites',obj);cache.tramites.push(obj);renderTramites();setTimeout(()=>editTramite(newId),50);
 }
 async function resetTramites(){
   if(!confirm('¿Restaurar aranceles a los valores originales?'))return;
@@ -1532,38 +1327,25 @@ async function resetTramites(){
 // CAUSAS
 // ══════════════════════════════════════════════════════════════
 function openModalCausa(editId){
-  document.getElementById('causa_id').value=editId||'';
-  document.getElementById('mCausaTitle').textContent=editId?'Editar Causa':'Nueva Causa';
+  document.getElementById('causa_id').value=editId||'';document.getElementById('mCausaTitle').textContent=editId?'Editar Causa':'Nueva Causa';
   if(editId){
     const c=cache.causas.find(x=>x.id===editId);if(!c)return;
-    document.getElementById('causa_caratula').value=c.caratula||'';
-    document.getElementById('causa_tribunal').value=c.tribunal||'PJN';
-    document.getElementById('causa_fuero').value=c.fuero||'';
-    document.getElementById('causa_juzgado').value=c.juzgado||'';
-    document.getElementById('causa_nro').value=c.nro||'';
-    document.getElementById('causa_cliente').value=c.cliente||'';
-    document.getElementById('causa_estado').value=c.estado||'activa';
-    document.getElementById('causa_presupuesto').value=c.presupuesto||'';
-    document.getElementById('causa_moneda').value=c.moneda||'ARS';
-    togglePresupuesto();
+    document.getElementById('causa_caratula').value=c.caratula||'';document.getElementById('causa_tribunal').value=c.tribunal||'PJN';
+    document.getElementById('causa_fuero').value=c.fuero||'';document.getElementById('causa_juzgado').value=c.juzgado||'';
+    document.getElementById('causa_nro').value=c.nro||'';document.getElementById('causa_cliente').value=c.cliente||'';
+    document.getElementById('causa_estado').value=c.estado||'activa';document.getElementById('causa_presupuesto').value=c.presupuesto||'';
+    document.getElementById('causa_moneda').value=c.moneda||'ARS';togglePresupuesto();
   }else{
     ['causa_caratula','causa_juzgado','causa_nro','causa_cliente','causa_presupuesto'].forEach(i=>document.getElementById(i).value='');
-    document.getElementById('causa_tribunal').value='PJN';
-    document.getElementById('causa_fuero').value='';
-    document.getElementById('causa_estado').value='activa';
-    document.getElementById('presupuestoSection').style.display='none';
+    document.getElementById('causa_tribunal').value='PJN';document.getElementById('causa_fuero').value='';
+    document.getElementById('causa_estado').value='activa';document.getElementById('presupuestoSection').style.display='none';
   }
   openModal('modalCausa');
 }
-function togglePresupuesto(){
-  const f=document.getElementById('causa_fuero').value;
-  document.getElementById('presupuestoSection').style.display=FUEROS_CIVILES.includes(f)?'block':'none';
-}
+function togglePresupuesto(){const f=document.getElementById('causa_fuero').value;document.getElementById('presupuestoSection').style.display=FUEROS_CIVILES.includes(f)?'block':'none';}
 async function saveCausa(){
   const caratula=document.getElementById('causa_caratula').value.trim();if(!caratula)return alert('Ingrese la carátula.');
-  const editId=document.getElementById('causa_id').value;
-  const fuero=document.getElementById('causa_fuero').value;
-  const esCivil=FUEROS_CIVILES.includes(fuero);
+  const editId=document.getElementById('causa_id').value;const fuero=document.getElementById('causa_fuero').value;const esCivil=FUEROS_CIVILES.includes(fuero);
   const obj={id:editId||uid(),caratula,tribunal:document.getElementById('causa_tribunal').value,fuero,juzgado:document.getElementById('causa_juzgado').value.trim()||null,nro:document.getElementById('causa_nro').value.trim()||null,cliente:document.getElementById('causa_cliente').value.trim()||null,estado:document.getElementById('causa_estado').value,presupuesto:esCivil&&document.getElementById('causa_presupuesto').value?parseFloat(document.getElementById('causa_presupuesto').value):null,moneda:esCivil?document.getElementById('causa_moneda').value:null,fecha:new Date().toISOString()};
   try{
     if(editId&&cache.causas.find(x=>x.id===editId)){await DB.update('crm_causas',editId,obj);const i=cache.causas.findIndex(x=>x.id===editId);cache.causas[i]=obj;}
@@ -1576,8 +1358,7 @@ function renderCausas(){
   const el=document.getElementById('listCausas');
   if(!cache.causas.length){el.innerHTML='<div class="empty-state"><div class="icon">📁</div><p>Sin causas. Creá la primera.</p></div>';return;}
   el.innerHTML=[...cache.causas].reverse().map(c=>{
-    const gastos=cache.gastos.filter(g=>g.causa===c.id);
-    const tot=gastos.reduce((s,g)=>s+(g.total||0),0);
+    const gastos=cache.gastos.filter(g=>g.causa===c.id);const tot=gastos.reduce((s,g)=>s+(g.total||0),0);
     let pptoEl='';
     if(c.presupuesto){const saldo=c.presupuesto-tot;pptoEl=`<span style="font-size:.72rem;font-family:'IBM Plex Mono',monospace;${saldo<0?'color:var(--urgent)':'color:var(--ok)'};font-weight:700;">${saldo<0?'⚠ -$'+(tot-c.presupuesto).toLocaleString('es-AR'):'💰 $'+saldo.toLocaleString('es-AR')}</span>`;}
     return`<div class="causa-card" onclick="showCausaDetail('${c.id}')">
@@ -1592,25 +1373,18 @@ function renderCausas(){
 }
 function showCausaDetail(id){
   const c=cache.causas.find(x=>x.id===id);if(!c)return;
-  document.getElementById('causaDetailContent').dataset.causaId = id;
-  const movs=cache.registros.filter(r=>r.causa===id);
-  const gastos=cache.gastos.filter(g=>g.causa===id);
-  const tot=gastos.reduce((s,g)=>s+(g.total||0),0);
+  document.getElementById('causaDetailContent').dataset.causaId=id;
+  const movs=cache.registros.filter(r=>r.causa===id);const gastos=cache.gastos.filter(g=>g.causa===id);const tot=gastos.reduce((s,g)=>s+(g.total||0),0);
   let pptoHtml='';
   if(c.presupuesto){
-    const saldo=c.presupuesto-tot;const exc=saldo<0;
-    const pct=Math.min((tot/c.presupuesto)*100,100);
-    const barClass=pct>=100?'deficit':pct>=80?'warn':'';
+    const saldo=c.presupuesto-tot;const exc=saldo<0;const pct=Math.min((tot/c.presupuesto)*100,100);const barClass=pct>=100?'deficit':pct>=80?'warn':'';
     pptoHtml=`<div class="ppto-bar-wrap"><div class="ppto-bar-track"><div class="ppto-bar-fill ${barClass}" style="width:${pct.toFixed(1)}%"></div></div><div class="ppto-bar-labels"><span>Gastado: $${tot.toLocaleString('es-AR')} (${pct.toFixed(0)}%)</span><span>${exc?'⚠ Excedido: $'+(tot-c.presupuesto).toLocaleString('es-AR'):'Saldo: $'+saldo.toLocaleString('es-AR')} de ${c.moneda} $${c.presupuesto.toLocaleString('es-AR')}</span></div></div>`;
   }
   document.getElementById('causaDetailContent').innerHTML=`
     <div class="causa-detail-header">
-      <div style="flex:1">
-        <div class="causa-detail-title">${c.caratula}</div>
+      <div style="flex:1"><div class="causa-detail-title">${c.caratula}</div>
         <div class="causa-detail-sub">${[c.tribunal,c.fuero,c.juzgado,c.nro].filter(Boolean).join(' · ')}</div>
-        ${c.cliente?`<div class="causa-detail-sub">👤 ${c.cliente}</div>`:''}
-        ${pptoHtml}
-      </div>
+        ${c.cliente?`<div class="causa-detail-sub">👤 ${c.cliente}</div>`:''}${pptoHtml}</div>
       <div style="display:flex;gap:.4rem;flex-wrap:wrap;">
         <button class="btn btn-ghost btn-sm" style="color:var(--paper);border-color:#555;" onclick="openModalRegistro('${id}')">+ Novedad</button>
         <button class="btn btn-ghost btn-sm" style="color:var(--paper);border-color:#555;" onclick="openModalGasto(null,'${id}')">+ Gasto</button>
@@ -1644,9 +1418,7 @@ function showCausaDetail(id){
 async function delCausa(id){
   if(!confirm('¿Eliminar causa y todos sus datos?'))return;
   await Promise.all([DB.delete('crm_causas',id),DB.deleteWhere('crm_registros','causa',id),DB.deleteWhere('crm_gastos','causa',id)]);
-  cache.causas=cache.causas.filter(c=>c.id!==id);
-  cache.registros=cache.registros.filter(r=>r.causa!==id);
-  cache.gastos=cache.gastos.filter(g=>g.causa!==id);
+  cache.causas=cache.causas.filter(c=>c.id!==id);cache.registros=cache.registros.filter(r=>r.causa!==id);cache.gastos=cache.gastos.filter(g=>g.causa!==id);
   showScreen('causas');updateStats();
 }
 
@@ -1656,8 +1428,7 @@ async function delCausa(id){
 function populateCausaSelectEl(id){
   const el=document.getElementById(id);if(!el)return;
   const isFilter=id==='filtroGastoCausa';
-  el.innerHTML=(isFilter?'<option value="">— Todas las causas —</option>':'<option value="">— General —</option>')+
-    cache.causas.map(c=>`<option value="${c.id}">${c.caratula.substring(0,50)}</option>`).join('');
+  el.innerHTML=(isFilter?'<option value="">— Todas las causas —</option>':'<option value="">— General —</option>')+cache.causas.map(c=>`<option value="${c.id}">${c.caratula.substring(0,50)}</option>`).join('');
 }
 function populateCausaSelects(){['tarea_causa','reg_causa','gasto_causa','filtroGastoCausa','evento_causa'].forEach(populateCausaSelectEl);}
 function updateStats(){
@@ -1671,12 +1442,8 @@ function updateStats(){
 }
 function openModal(id){document.getElementById(id).classList.remove('hidden');}
 function closeModal(id){document.getElementById(id).classList.add('hidden');}
-function showFileName(inp,tid){document.getElementById(tid).textContent=inp.files[0]?.name||'';}
 document.querySelectorAll('.modal-overlay').forEach(m=>{m.addEventListener('click',e=>{if(e.target===m)m.classList.add('hidden');});});
 
-// ══════════════════════════════════════════════════════════════
-// INIT
-// ══════════════════════════════════════════════════════════════
 // ══════════════════════════════════════════════════════════════
 // INIT
 // ══════════════════════════════════════════════════════════════
@@ -1688,11 +1455,7 @@ document.querySelectorAll('.modal-overlay').forEach(m=>{m.addEventListener('clic
   if(ok){
     loading.style.display='none';
     populateCausaSelects();updateStats();renderCal();
-    
-    // ✅ Iniciar auto-sync
-    startAutoSync();
-    SYNC_CONFIG.lastSync = new Date();
-    updateSyncTimestamp();
+    startAutoSync();SYNC_CONFIG.lastSync=new Date();updateSyncTimestamp();
   }else{
     document.getElementById('dbLoadMsg').innerHTML='';
     loading.querySelector('.spinner').style.display='none';
