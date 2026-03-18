@@ -941,10 +941,9 @@ function printTareas(){
   document.getElementById('printTareas').innerHTML=`
     <div class="pt-header">
       <div><div class="pt-logo">I|A <span>ARIGÓS ABOGADO</span></div><div style="font-size:8pt;color:#555;margin-top:3pt;">TE: 1154737787 · ignacioarigos@gmail.com</div></div>
-      <div class="pt-meta"><div style="font-size:13pt;font-weight:700;">LISTA DE TAREAS</div><div>${fechaImp}</div><div>Activas: ${activos.length} · Completadas: ${archivo.length}</div></div>
+      <div class="pt-meta"><div style="font-size:13pt;font-weight:700;">LISTA DE TAREAS</div><div>${fechaImp}</div><div>Pendientes: ${activos.length}</div>
     </div>
     ${seccion(urgentes,'🔴 URGENTES')}${seccion(enCurso,'🔄 EN CURSO')}${seccion(noIniciadas,'⬜ NO INICIADAS')}
-    ${archivo.length?`<div class="pt-section">✅ ARCHIVO (${archivo.length})</div>`+archivo.map(t=>`<div class="pt-row" style="opacity:.5;"><span class="checkbox" style="background:#ccc;"></span><div class="pt-title" style="text-decoration:line-through;">${t.titulo}</div></div>`).join(''):''}
     <div class="pt-footer"><span>I|A Sistema de Gestión Legal</span><span>Impreso el ${fechaImp}</span></div>`;
   document.getElementById('printGastos').innerHTML='';
   printZoneShow('printTareas');
