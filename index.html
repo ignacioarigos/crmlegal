@@ -1080,7 +1080,13 @@ async function saveTarea(){
 
 function renderTareas(){
   const co={urgente:0,alta:1,normal:2,baja:3};
-  const srt=arr=>[...arr].sort((a,b)=>(co[a.criticidad]||2)-(co[b.criticidad]||2));
+  const byVenc=(a,b)=>{
+    if(!a.vencimiento&&!b.vencimiento)return 0;
+    if(!a.vencimiento)return 1;
+    if(!b.vencimiento)return -1;
+    return a.vencimiento.localeCompare(b.vencimiento);
+  };
+  const srt=arr=>[...arr].sort((a,b)=>(co[a.criticidad]||2)-(co[b.criticidad]||2)||byVenc(a,b));
   const activos=srt(cache.tareas.filter(t=>t.estado!=='completada'));
   const archivados=[...cache.tareas.filter(t=>t.estado==='completada')].reverse();
   document.getElementById('badgeTareas').textContent=activos.length;
