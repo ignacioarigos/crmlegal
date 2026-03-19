@@ -57,7 +57,7 @@ export default function Documentos({ store }) {
     const prompt = `${pl.prompt}\n\nDATOS DEL DOCUMENTO:\n${ctx}\n\nGenerá el documento completo listo para usar. Formato profesional argentino. Solo el texto del documento, sin explicaciones ni comentarios.`
 
     try {
-      const res = await fetch('/api-claude', {
+      const res = await fetch('/api/claude', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt }),
