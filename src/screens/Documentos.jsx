@@ -57,14 +57,10 @@ export default function Documentos({ store }) {
     const prompt = `${pl.prompt}\n\nDATOS DEL DOCUMENTO:\n${ctx}\n\nGenerá el documento completo listo para usar. Formato profesional argentino. Solo el texto del documento, sin explicaciones ni comentarios.`
 
     try {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
+      const res = await fetch('/api-claude', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 1500,
-          messages: [{ role: 'user', content: prompt }],
-        }),
+        body: JSON.stringify({ prompt }),
       })
       const data = await res.json()
       setTexto(data.content?.find(b => b.type === 'text')?.text || 'Error al generar.')
