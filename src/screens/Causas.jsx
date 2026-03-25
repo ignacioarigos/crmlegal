@@ -1,7 +1,7 @@
 // ── CAUSAS ────────────────────────────────────────────────────
 import { useState } from 'react'
-import { saveCausa, deleteCausa, saveCobro, saveGasto } from '../lib/store.js'
-import { uid, dateFmt, fmtF, FUEROS_CIVILES } from '../lib/supabase.js'
+import { saveCausa, deleteCausa, saveCobro, saveGasto, saveTarea, saveRegistro } from '../lib/store.js'
+import { uid, dateFmt, fmtF, FUEROS_CIVILES, fetchFeriados, sumarHabiles, sumarCorridos, fechaLarga } from '../lib/supabase.js'
 import Modal from '../components/Modal.jsx'
 
 export function Causas({ navigate, store }) {
@@ -102,6 +102,8 @@ export function Causas({ navigate, store }) {
 export function CausaDetail({ id, navigate, store }) {
   const { causas, registros, gastos, cobros, tramites } = store
   const c = causas.find(x=>x.id===id)
+
+  // ── Modales existentes ──
   const [cobroModal, setCobroModal] = useState(false)
   const [gastoModal, setGastoModal] = useState(false)
   const [cbFecha, setCbFecha] = useState(dateFmt(new Date()))
@@ -113,14 +115,104 @@ export function CausaDetail({ id, navigate, store }) {
   const [gPrecio, setGPrecio] = useState('')
   const [gFecha, setGFecha] = useState(dateFmt(new Date()))
 
+  // ── Modal Nueva Tarea ──
+  const [tareaModal, setTareaModal] = useState(false)
+  const [tTitulo, setTTitulo] = useState('')
+  const [tCrit, setTCrit] = useState('normal')
+  const [tVenc, setTVenc] = useState('')
+  const [tEstado, setTEstado] = useState('no-iniciada')
+  const [tNotas, setTNotas] = useState('')
+  const [tSaving, setTSaving] = useState(false)
+
+  const openTareaModal = () => {
+    setTTitulo(''); setTCrit('normal'); setTVenc(''); setTEstado('no-iniciada'); setTNotas('')
+    setTareaModal(true)
+  }
+
+  const handleSaveTarea = async () => {
+    if (!tTitulo.trim()) return alert('Ingrese un título.')
+    setTSaving(true)
+    await saveTarea({
+      id: uid(),
+      titulo: tTitulo.trim(),
+      causa: id,
+      criticidad: tVenc ? 'urgente' : tCrit,
+      vencimiento: tVenc || null,
+      estado: tEstado,
+      notas: tNotas.trim() || null,
+      fecha: new Date().toISOString()
+    })
+    setTSaving(false); setTareaModal(false)
+  }
+
+  // ── Modal Nuevo Movimiento ──
+  const [movModal, setMovModal] = useState(false)
+  const [mPortal, setMPortal] = useState('')
+  const [mNovedad, setMNovedad] = useState('')
+  const [mEstrategia, setMEstrategia] = useState('')
+  const [mTieneVenc, setMTieneVenc] = useState(false)
+  const [mDias, setMDias] = useState('')
+  const [mFechaInicio, setMFechaInicio] = useState(dateFmt(new Date()))
+  const [mVencResult, setMVencResult] = useState(null)
+  const [mCrearTarea, setMCrearTarea] = useState(false)
+  const [mTareaTitulo, setMTareaTitulo] = useState('')
+  const [mCalcMsg, setMCalcMsg] = useState('')
+
+  const openMovModal = () => {
+    setMPortal(''); setMNovedad(''); setMEstrategia(''); setMTieneVenc(false)
+    setMDias(''); setMFechaInicio(dateFmt(new Date())); setMVencResult(null)
+    setMCrearTarea(false); setMTareaTitulo(''); setMCalcMsg('')
+    setMovModal(true)
+  }
+
+  const calcVencimientoMov = async () => {
+    if (!mDias || !mFechaInicio || !mPortal) return
+    setMCalcMsg('⏳ Calculando...')
+    try {
+      const desde = new Date(mFechaInicio + 'T12:00:00')
+      const vd = mPortal === 'SCBA'
+        ? await sumarCorridos(desde, parseInt(mDias))
+        : await sumarHabiles(desde, parseInt(mDias))
+      setMVencResult({ fecha: dateFmt(vd), texto: `Vence el ${fechaLarga(vd)}` })
+      setMCalcMsg('✅ Calculado')
+    } catch { setMCalcMsg('⚠ Error') }
+  }
+
+  const handleSaveMovimiento = async () => {
+    if (!mPortal || !mNovedad.trim()) return alert('Complete portal y novedad.')
+    const obj = {
+      id: uid(),
+      portal: mPortal,
+      causa: id,
+      novedad: mNovedad.trim(),
+      estrategia: mEstrategia.trim() || null,
+      tiene_vencimiento: mTieneVenc,
+      vencimiento_fecha: mTieneVenc && mVencResult ? mVencResult.fecha : null,
+      vencimiento_texto: mTieneVenc && mVencResult ? mVencResult.texto : null,
+      fecha: new Date().toISOString()
+    }
+    await saveRegistro(obj)
+    if (mCrearTarea) {
+      const tt = mTareaTitulo.trim() || mNovedad.substring(0, 80)
+      await saveTarea({
+        id: uid(), titulo: tt, causa: id,
+        criticidad: mTieneVenc && mVencResult ? 'urgente' : 'normal',
+        vencimiento: mTieneVenc && mVencResult ? mVencResult.fecha : null,
+        estado: 'no-iniciada', notas: mEstrategia.trim() || null,
+        fecha: new Date().toISOString()
+      })
+    }
+    setMovModal(false)
+  }
+
   if (!c) return <div className="empty-state"><p>Causa no encontrada</p></div>
 
-  const movs    = registros.filter(r=>r.causa===id)
-  const gList   = gastos.filter(g=>g.causa===id)
-  const cbList  = cobros.filter(cb=>cb.causa===id)
-  const tot     = gList.reduce((s,g)=>s+(g.total||0),0)
-  const totARS  = cbList.filter(cb=>!cb.moneda||cb.moneda==='ARS').reduce((s,cb)=>s+(cb.monto||0),0)
-  const totUSD  = cbList.filter(cb=>cb.moneda==='USD').reduce((s,cb)=>s+(cb.monto||0),0)
+  const movs   = registros.filter(r=>r.causa===id)
+  const gList  = gastos.filter(g=>g.causa===id)
+  const cbList = cobros.filter(cb=>cb.causa===id)
+  const tot    = gList.reduce((s,g)=>s+(g.total||0),0)
+  const totARS = cbList.filter(cb=>!cb.moneda||cb.moneda==='ARS').reduce((s,cb)=>s+(cb.monto||0),0)
+  const totUSD = cbList.filter(cb=>cb.moneda==='USD').reduce((s,cb)=>s+(cb.monto||0),0)
 
   let pptoBar = null
   if (c.presupuesto) {
@@ -163,6 +255,10 @@ export function CausaDetail({ id, navigate, store }) {
           {pptoBar}
         </div>
         <div style={{display:'flex',gap:'.4rem',flexWrap:'wrap'}}>
+          {/* ── Nuevos botones ── */}
+          <button className="btn btn-primary btn-sm" onClick={openTareaModal}>＋ Tarea</button>
+          <button className="btn btn-primary btn-sm" style={{background:'var(--slate)',borderColor:'var(--slate)'}} onClick={openMovModal}>＋ Movimiento</button>
+          {/* ── Botones existentes ── */}
           <button className="btn btn-ghost btn-sm" style={{color:'var(--paper)',borderColor:'#555'}} onClick={()=>setGastoModal(true)}>+ Gasto</button>
           <button className="btn btn-ghost btn-sm" style={{color:'var(--paper)',borderColor:'#555'}} onClick={()=>setCobroModal(true)}>+ Cobro</button>
           <button className="btn btn-danger btn-sm" onClick={()=>{if(confirm('¿Eliminar causa y todos sus datos?')){deleteCausa(id);navigate('causas')}}}>Eliminar</button>
@@ -185,10 +281,12 @@ export function CausaDetail({ id, navigate, store }) {
       </div>
 
       {/* Movimientos */}
-      <h3 style={{fontFamily:'Playfair Display,serif',fontSize:'1.05rem',marginBottom:'.65rem'}}>Movimientos</h3>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'.65rem'}}>
+        <h3 style={{fontFamily:'Playfair Display,serif',fontSize:'1.05rem'}}>Movimientos</h3>
+      </div>
       {movs.length===0?<p style={{color:'var(--muted)',fontSize:'.83rem',marginBottom:'1.3rem'}}>Sin movimientos.</p>:(
         <div style={{display:'flex',flexDirection:'column',gap:'.45rem',marginBottom:'1.3rem'}}>
-          {movs.map(r=>(
+          {[...movs].reverse().map(r=>(
             <div key={r.id} className="registro-entry">
               <div className="registro-portal">{r.portal}</div>
               <div className="registro-body">
@@ -200,6 +298,35 @@ export function CausaDetail({ id, navigate, store }) {
           ))}
         </div>
       )}
+
+      {/* Tareas de esta causa */}
+      {(() => {
+        const tareasCausa = (store.tareas || []).filter(t => t.causa === id)
+        if (tareasCausa.length === 0) return null
+        const co = { urgente:0, alta:1, normal:2, baja:3 }
+        const sorted = [...tareasCausa].sort((a,b)=>(co[a.criticidad]||2)-(co[b.criticidad]||2))
+        const critMap = { urgente:'🔴', alta:'🟠', normal:'🟢', baja:'⚪' }
+        const estadoMap = { 'no-iniciada':'No iniciada', 'en-curso':'En curso', 'completada':'Completada' }
+        return (
+          <div style={{marginBottom:'1.3rem'}}>
+            <h3 style={{fontFamily:'Playfair Display,serif',fontSize:'1.05rem',marginBottom:'.65rem'}}>Tareas</h3>
+            <div style={{display:'flex',flexDirection:'column',gap:'.4rem'}}>
+              {sorted.map(t=>(
+                <div key={t.id} className={`task-strip ${t.criticidad||'normal'}`}>
+                  <div className="task-main">
+                    <div className="task-title">{critMap[t.criticidad]||'🟢'} {t.titulo}</div>
+                    <div className="task-meta">
+                      <span>{estadoMap[t.estado]||t.estado}</span>
+                      {t.vencimiento&&<span className="task-vencimiento">Vence: {fmtF(t.vencimiento)}</span>}
+                      {t.notas&&<span className="task-notas">{t.notas.substring(0,55)}{t.notas.length>55?'…':''}</span>}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Gastos */}
       <h3 style={{fontFamily:'Playfair Display,serif',fontSize:'1.05rem',marginBottom:'.65rem'}}>Gastos</h3>
@@ -224,6 +351,118 @@ export function CausaDetail({ id, navigate, store }) {
             )})}</tbody>
           </table>
         </div>
+      )}
+
+      {/* ── Modal Nueva Tarea ── */}
+      {tareaModal&&(
+        <Modal title="Nueva Tarea" onClose={()=>setTareaModal(false)}>
+          <div style={{marginBottom:'.8rem',padding:'.5rem .8rem',background:'var(--cream)',borderRadius:6,fontSize:'.78rem',color:'var(--muted)',fontFamily:'IBM Plex Mono,monospace'}}>
+            📁 {c.caratula.substring(0,60)}{c.caratula.length>60?'…':''}
+          </div>
+          <div className="form-row">
+            <div className="form-group" style={{flex:2}}>
+              <label>Título *</label>
+              <input className="form-control" value={tTitulo} onChange={e=>setTTitulo(e.target.value)} placeholder="Descripción de la tarea" />
+            </div>
+          </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label>Criticidad</label>
+              <select className="form-control" value={tCrit} onChange={e=>setTCrit(e.target.value)}>
+                <option value="urgente">🔴 Urgente</option>
+                <option value="alta">🟠 Alta</option>
+                <option value="normal">🟢 Normal</option>
+                <option value="baja">⚪ Baja</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Estado</label>
+              <select className="form-control" value={tEstado} onChange={e=>setTEstado(e.target.value)}>
+                <option value="no-iniciada">⬜ No Iniciada</option>
+                <option value="en-curso">🔄 En Curso</option>
+              </select>
+            </div>
+          </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label>Vencimiento</label>
+              <input type="date" className="form-control" value={tVenc} onChange={e=>{setTVenc(e.target.value);if(e.target.value)setTCrit('urgente')}} />
+            </div>
+          </div>
+          <div className="form-group" style={{marginBottom:'1rem'}}>
+            <label>Notas</label>
+            <textarea className="form-control" rows="2" value={tNotas} onChange={e=>setTNotas(e.target.value)} placeholder="Detalles..." />
+          </div>
+          <div style={{display:'flex',justifyContent:'flex-end',gap:'.6rem'}}>
+            <button className="btn btn-ghost" onClick={()=>setTareaModal(false)}>Cancelar</button>
+            <button className="btn btn-primary" onClick={handleSaveTarea} disabled={tSaving}>{tSaving?'Guardando...':'Guardar'}</button>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Modal Nuevo Movimiento ── */}
+      {movModal&&(
+        <Modal title="Nuevo Movimiento" onClose={()=>setMovModal(false)}>
+          <div style={{marginBottom:'.8rem',padding:'.5rem .8rem',background:'var(--cream)',borderRadius:6,fontSize:'.78rem',color:'var(--muted)',fontFamily:'IBM Plex Mono,monospace'}}>
+            📁 {c.caratula.substring(0,60)}{c.caratula.length>60?'…':''}
+          </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label>Portal *</label>
+              <select className="form-control" value={mPortal} onChange={e=>{setMPortal(e.target.value);setMCalcMsg('')}}>
+                <option value="">— Seleccione —</option>
+                <option>PJN</option><option>SCBA</option><option value="EJE">EJE (CABA)</option>
+              </select>
+            </div>
+          </div>
+          <div className="form-group" style={{marginBottom:'.9rem'}}>
+            <label>Novedad / Providencia *</label>
+            <textarea className="form-control" rows="3" value={mNovedad} onChange={e=>setMNovedad(e.target.value)} placeholder="Describa el movimiento..." />
+          </div>
+          <div className="form-group" style={{marginBottom:'.9rem'}}>
+            <label>Estrategia / Respuesta</label>
+            <textarea className="form-control" rows="2" value={mEstrategia} onChange={e=>setMEstrategia(e.target.value)} placeholder="¿Qué acción plantea?" />
+          </div>
+          <div className="card" style={{background:'var(--cream)',marginBottom:'.9rem',padding:'.9rem'}}>
+            <div className="checkbox-row" style={{marginBottom:'.65rem'}}>
+              <input type="checkbox" checked={mTieneVenc} onChange={e=>setMTieneVenc(e.target.checked)} />
+              <label><strong>Vencimiento de plazo</strong></label>
+            </div>
+            {mTieneVenc&&(
+              <div>
+                <div style={{display:'flex',alignItems:'center',gap:'.65rem',flexWrap:'wrap'}}>
+                  <select className="form-control" value={mDias} onChange={e=>{setMDias(e.target.value);setMVencResult(null)}} style={{width:80}}>
+                    <option value="">Días</option>
+                    {[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15].map(n=><option key={n}>{n}</option>)}
+                  </select>
+                  <span style={{fontSize:'.78rem',color:'var(--muted)'}}>{mPortal==='SCBA'?'días corridos':'días hábiles'}</span>
+                  <input type="date" className="form-control" value={mFechaInicio} onChange={e=>{setMFechaInicio(e.target.value);setMVencResult(null)}} style={{width:150}} />
+                  <button className="btn btn-ghost btn-sm" onClick={calcVencimientoMov}>Calcular</button>
+                </div>
+                {mCalcMsg&&<div style={{fontSize:'.75rem',color:'var(--muted)',marginTop:'.3rem',fontFamily:'IBM Plex Mono,monospace'}}>{mCalcMsg}</div>}
+                {mVencResult&&<div className="vencimiento-result">{mVencResult.texto}</div>}
+              </div>
+            )}
+          </div>
+          <div className="card" style={{background:'var(--cream)',marginBottom:'.9rem',padding:'.9rem'}}>
+            <div className="checkbox-row">
+              <input type="checkbox" checked={mCrearTarea} onChange={e=>setMCrearTarea(e.target.checked)} />
+              <label><strong>Generar tarea a partir de este movimiento</strong></label>
+            </div>
+            {mCrearTarea&&(
+              <div style={{marginTop:'.75rem'}}>
+                <div className="form-group">
+                  <label>Título de la tarea</label>
+                  <input className="form-control" value={mTareaTitulo} onChange={e=>setMTareaTitulo(e.target.value)} placeholder="Si vacío, se usa el texto de la novedad" />
+                </div>
+              </div>
+            )}
+          </div>
+          <div style={{display:'flex',justifyContent:'flex-end',gap:'.6rem'}}>
+            <button className="btn btn-ghost" onClick={()=>setMovModal(false)}>Cancelar</button>
+            <button className="btn btn-primary" onClick={handleSaveMovimiento}>Guardar</button>
+          </div>
+        </Modal>
       )}
 
       {/* Modal cobro */}
