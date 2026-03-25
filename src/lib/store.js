@@ -88,6 +88,12 @@ export async function saveRegistro(obj) {
   notify()
 }
 
+export async function updateRegistro(id, patch) {
+  await DB.update('crm_registros', id, patch)
+  _state.registros = _state.registros.map(x => x.id === id ? { ...x, ...patch } : x)
+  notify()
+}
+
 export async function deleteRegistro(id) {
   await DB.delete('crm_registros', id)
   _state.registros = _state.registros.filter(x => x.id !== id)
