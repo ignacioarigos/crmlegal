@@ -1,7 +1,7 @@
 // ── CAUSAS ────────────────────────────────────────────────────
 import { useState } from 'react'
-import { saveCausa, deleteCausa, saveCobro, saveGasto, saveTarea, saveRegistro } from '../lib/store.js'
-import { uid, dateFmt, fmtF, FUEROS_CIVILES, fetchFeriados, sumarHabiles, sumarCorridos, fechaLarga } from '../lib/supabase.js'
+import { saveCausa, deleteCausa, saveCobro, saveGasto, saveTarea, saveRegistro, updateRegistro, deleteRegistro } from '../lib/store.js'
+import { uid, dateFmt, fmtF, FUEROS_CIVILES, sumarHabiles, sumarCorridos, fechaLarga } from '../lib/supabase.js'
 import Modal from '../components/Modal.jsx'
 
 export function Causas({ navigate, store }) {
@@ -103,19 +103,21 @@ export function CausaDetail({ id, navigate, store }) {
   const { causas, registros, gastos, cobros, tramites } = store
   const c = causas.find(x=>x.id===id)
 
-  // ── Modales existentes ──
+  // ── Cobro ──
   const [cobroModal, setCobroModal] = useState(false)
-  const [gastoModal, setGastoModal] = useState(false)
   const [cbFecha, setCbFecha] = useState(dateFmt(new Date()))
   const [cbMonto, setCbMonto] = useState('')
   const [cbConcepto, setCbConcepto] = useState('')
   const [cbMoneda, setCbMoneda] = useState('ARS')
+
+  // ── Gasto ──
+  const [gastoModal, setGastoModal] = useState(false)
   const [gTramiteId, setGTramiteId] = useState('')
   const [gCant, setGCant] = useState(1)
   const [gPrecio, setGPrecio] = useState('')
   const [gFecha, setGFecha] = useState(dateFmt(new Date()))
 
-  // ── Modal Nueva Tarea ──
+  // ── Nueva Tarea ──
   const [tareaModal, setTareaModal] = useState(false)
   const [tTitulo, setTTitulo] = useState('')
   const [tCrit, setTCrit] = useState('normal')
@@ -132,21 +134,13 @@ export function CausaDetail({ id, navigate, store }) {
   const handleSaveTarea = async () => {
     if (!tTitulo.trim()) return alert('Ingrese un título.')
     setTSaving(true)
-    await saveTarea({
-      id: uid(),
-      titulo: tTitulo.trim(),
-      causa: id,
-      criticidad: tVenc ? 'urgente' : tCrit,
-      vencimiento: tVenc || null,
-      estado: tEstado,
-      notas: tNotas.trim() || null,
-      fecha: new Date().toISOString()
-    })
+    await saveTarea({ id: uid(), titulo: tTitulo.trim(), causa: id, criticidad: tVenc?'urgente':tCrit, vencimiento: tVenc||null, estado: tEstado, notas: tNotas.trim()||null, fecha: new Date().toISOString() })
     setTSaving(false); setTareaModal(false)
   }
 
-  // ── Modal Nuevo Movimiento ──
+  // ── Movimiento (nuevo + edición) ──
   const [movModal, setMovModal] = useState(false)
+  const [movEditId, setMovEditId] = useState(null)
   const [mPortal, setMPortal] = useState('')
   const [mNovedad, setMNovedad] = useState('')
   const [mEstrategia, setMEstrategia] = useState('')
@@ -154,14 +148,28 @@ export function CausaDetail({ id, navigate, store }) {
   const [mDias, setMDias] = useState('')
   const [mFechaInicio, setMFechaInicio] = useState(dateFmt(new Date()))
   const [mVencResult, setMVencResult] = useState(null)
+  const [mVencTexto, setMVencTexto] = useState('')
   const [mCrearTarea, setMCrearTarea] = useState(false)
   const [mTareaTitulo, setMTareaTitulo] = useState('')
   const [mCalcMsg, setMCalcMsg] = useState('')
 
-  const openMovModal = () => {
-    setMPortal(''); setMNovedad(''); setMEstrategia(''); setMTieneVenc(false)
-    setMDias(''); setMFechaInicio(dateFmt(new Date())); setMVencResult(null)
-    setMCrearTarea(false); setMTareaTitulo(''); setMCalcMsg('')
+  const openMovModal = (regId = null) => {
+    setMovEditId(regId)
+    if (regId) {
+      const r = registros.find(x => x.id === regId)
+      setMPortal(r.portal||'')
+      setMNovedad(r.novedad||'')
+      setMEstrategia(r.estrategia||'')
+      setMTieneVenc(r.tiene_vencimiento||false)
+      setMVencResult(r.vencimiento_fecha ? { fecha: r.vencimiento_fecha, texto: r.vencimiento_texto||'' } : null)
+      setMVencTexto(r.vencimiento_texto||'')
+      setMDias(''); setMFechaInicio(dateFmt(new Date())); setMCalcMsg('')
+      setMCrearTarea(false); setMTareaTitulo('')
+    } else {
+      setMPortal(''); setMNovedad(''); setMEstrategia(''); setMTieneVenc(false)
+      setMDias(''); setMFechaInicio(dateFmt(new Date())); setMVencResult(null)
+      setMVencTexto(''); setMCrearTarea(false); setMTareaTitulo(''); setMCalcMsg('')
+    }
     setMovModal(true)
   }
 
@@ -180,29 +188,145 @@ export function CausaDetail({ id, navigate, store }) {
 
   const handleSaveMovimiento = async () => {
     if (!mPortal || !mNovedad.trim()) return alert('Complete portal y novedad.')
-    const obj = {
-      id: uid(),
-      portal: mPortal,
-      causa: id,
-      novedad: mNovedad.trim(),
-      estrategia: mEstrategia.trim() || null,
-      tiene_vencimiento: mTieneVenc,
-      vencimiento_fecha: mTieneVenc && mVencResult ? mVencResult.fecha : null,
-      vencimiento_texto: mTieneVenc && mVencResult ? mVencResult.texto : null,
-      fecha: new Date().toISOString()
-    }
-    await saveRegistro(obj)
-    if (mCrearTarea) {
-      const tt = mTareaTitulo.trim() || mNovedad.substring(0, 80)
-      await saveTarea({
-        id: uid(), titulo: tt, causa: id,
-        criticidad: mTieneVenc && mVencResult ? 'urgente' : 'normal',
-        vencimiento: mTieneVenc && mVencResult ? mVencResult.fecha : null,
-        estado: 'no-iniciada', notas: mEstrategia.trim() || null,
+    if (movEditId) {
+      // Editar existente usando saveRegistro con upsert
+      const original = registros.find(x => x.id === movEditId)
+      const patch = {
+        portal: mPortal,
+        novedad: mNovedad.trim(),
+        estrategia: mEstrategia.trim() || null,
+        tiene_vencimiento: mTieneVenc,
+        vencimiento_fecha: mTieneVenc && mVencResult ? mVencResult.fecha : null,
+        vencimiento_texto: mTieneVenc && mVencResult ? mVencResult.texto : null,
+      }
+      await updateRegistro(movEditId, patch)
+    } else {
+      const obj = {
+        id: uid(), portal: mPortal, causa: id,
+        novedad: mNovedad.trim(), estrategia: mEstrategia.trim() || null,
+        tiene_vencimiento: mTieneVenc,
+        vencimiento_fecha: mTieneVenc && mVencResult ? mVencResult.fecha : null,
+        vencimiento_texto: mTieneVenc && mVencResult ? mVencResult.texto : null,
         fecha: new Date().toISOString()
-      })
+      }
+      await saveRegistro(obj)
+      if (mCrearTarea) {
+        const tt = mTareaTitulo.trim() || mNovedad.substring(0, 80)
+        await saveTarea({ id: uid(), titulo: tt, causa: id, criticidad: mTieneVenc && mVencResult ? 'urgente' : 'normal', vencimiento: mTieneVenc && mVencResult ? mVencResult.fecha : null, estado: 'no-iniciada', notas: mEstrategia.trim() || null, fecha: new Date().toISOString() })
+      }
     }
     setMovModal(false)
+  }
+
+  // ── Imprimir causa ──
+  const handlePrintCausa = () => {
+    if (!c) return
+    const movs   = registros.filter(r=>r.causa===id)
+    const gList  = gastos.filter(g=>g.causa===id)
+    const cbList = cobros.filter(cb=>cb.causa===id)
+    const tareasCausa = (store.tareas||[]).filter(t=>t.causa===id)
+    const tot    = gList.reduce((s,g)=>s+(g.total||0),0)
+    const totARS = cbList.filter(cb=>!cb.moneda||cb.moneda==='ARS').reduce((s,cb)=>s+(cb.monto||0),0)
+    const totUSD = cbList.filter(cb=>cb.moneda==='USD').reduce((s,cb)=>s+(cb.monto||0),0)
+
+    const secMov = movs.length ? `
+      <h2>Movimientos (${movs.length})</h2>
+      ${[...movs].reverse().map(r=>`
+        <div class="entry">
+          <span class="badge">${r.portal}</span>
+          <div class="entry-body">
+            <div class="entry-main">${r.novedad}</div>
+            ${r.estrategia?`<div class="entry-strat">💡 ${r.estrategia}</div>`:''}
+            <div class="entry-meta">${fmtF(r.fecha)}${r.tiene_vencimiento&&r.vencimiento_texto?` &nbsp;·&nbsp; <strong style="color:#c0392b">${r.vencimiento_texto}</strong>`:''}</div>
+          </div>
+        </div>
+      `).join('')}
+    ` : '<p class="empty">Sin movimientos registrados.</p>'
+
+    const secTareas = tareasCausa.length ? `
+      <h2>Tareas (${tareasCausa.length})</h2>
+      <table>
+        <thead><tr><th>Tarea</th><th>Criticidad</th><th>Estado</th><th>Vencimiento</th></tr></thead>
+        <tbody>${tareasCausa.map(t=>`
+          <tr>
+            <td>${t.titulo}${t.notas?`<br><small style="color:#888;font-style:italic">${t.notas}</small>`:''}</td>
+            <td>${{urgente:'🔴 Urgente',alta:'🟠 Alta',normal:'🟢 Normal',baja:'⚪ Baja'}[t.criticidad]||t.criticidad}</td>
+            <td>${{'no-iniciada':'No iniciada','en-curso':'En curso','completada':'Completada'}[t.estado]||t.estado}</td>
+            <td style="color:${t.vencimiento?'#c0392b':'#999'};font-weight:${t.vencimiento?700:400}">${t.vencimiento?fmtF(t.vencimiento):'—'}</td>
+          </tr>
+        `).join('')}</tbody>
+      </table>
+    ` : ''
+
+    const secGastos = gList.length ? `
+      <h2>Gastos</h2>
+      <table>
+        <thead><tr><th>Trámite</th><th>Cant.</th><th>P.U.</th><th>Total</th><th>Fecha</th></tr></thead>
+        <tbody>
+          ${gList.map(g=>`<tr><td>${g.tramite_nombre}</td><td style="text-align:right">${g.cant}</td><td style="text-align:right">$${(g.precio_u||0).toLocaleString('es-AR')}</td><td style="text-align:right;font-weight:700">$${(g.total||0).toLocaleString('es-AR')}</td><td>${g.fecha?fmtF(g.fecha):'-'}</td></tr>`).join('')}
+          <tr style="background:#f0ebe0;font-weight:700"><td colspan="3">TOTAL</td><td style="text-align:right">$${tot.toLocaleString('es-AR')}</td><td></td></tr>
+        </tbody>
+      </table>
+    ` : ''
+
+    const secCobros = cbList.length ? `
+      <h2>Cobros</h2>
+      <table>
+        <thead><tr><th>Concepto</th><th>Moneda</th><th>Fecha</th><th>Monto</th></tr></thead>
+        <tbody>
+          ${[...cbList].reverse().map(cb=>{const isUSD=cb.moneda==='USD';return`<tr><td>${cb.concepto}</td><td>${isUSD?'USD':'ARS'}</td><td>${fmtF(cb.fecha)}</td><td style="text-align:right;font-weight:700;color:${isUSD?'#1a5276':'#1e6b4a'}">${isUSD?'U$S ':'$'}${(cb.monto||0).toLocaleString('es-AR')}</td></tr>`}).join('')}
+        </tbody>
+      </table>
+      <p style="font-size:.8rem;color:#555;margin-top:.5rem">
+        Total cobrado ARS: <strong>$${totARS.toLocaleString('es-AR')}</strong>
+        ${totUSD>0?` &nbsp;·&nbsp; Total cobrado USD: <strong>U$S ${totUSD.toLocaleString('es-AR')}</strong>`:''}
+      </p>
+    ` : ''
+
+    const html = `
+      <!DOCTYPE html><html><head>
+      <meta charset="UTF-8">
+      <title>${c.caratula} — I|A</title>
+      <style>
+        body { font-family: 'IBM Plex Sans', Arial, sans-serif; padding: 2rem; color: #111; font-size: 13px; max-width: 900px; margin: 0 auto; }
+        .header { border-bottom: 3px solid #b8922a; padding-bottom: 1rem; margin-bottom: 1.5rem; }
+        .logo { font-size: .75rem; color: #888; font-family: monospace; margin-bottom: .3rem; }
+        h1 { font-family: Georgia, serif; font-size: 1.4rem; margin: 0 0 .3rem; }
+        .meta { font-size: .75rem; color: #666; font-family: monospace; }
+        h2 { font-family: Georgia, serif; font-size: 1rem; margin: 1.5rem 0 .6rem; border-bottom: 1px solid #ddd; padding-bottom: .3rem; color: #333; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: .5rem; }
+        th { background: #0f0e0c; color: #d4a843; text-align: left; padding: .4rem .6rem; font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; }
+        td { padding: .4rem .6rem; border-bottom: 1px solid #e8e3da; vertical-align: top; font-size: .8rem; }
+        .entry { display: flex; gap: .7rem; margin-bottom: .7rem; padding-bottom: .7rem; border-bottom: 1px solid #eee; }
+        .badge { background: #0f0e0c; color: #d4a843; border-radius: 4px; padding: .2rem .5rem; font-family: monospace; font-size: .65rem; font-weight: 700; white-space: nowrap; align-self: flex-start; }
+        .entry-body { flex: 1; }
+        .entry-main { font-size: .83rem; font-weight: 500; margin-bottom: .2rem; }
+        .entry-strat { font-size: .75rem; color: #2c3e50; font-style: italic; border-left: 2px solid #b8922a; padding-left: .4rem; margin: .25rem 0; }
+        .entry-meta { font-size: .68rem; color: #888; font-family: monospace; }
+        .empty { color: #aaa; font-style: italic; font-size: .8rem; }
+        @media print { body { padding: 0; } }
+      </style>
+      </head><body>
+      <div class="header">
+        <div class="logo">I|A — GESTIÓN LEGAL</div>
+        <h1>${c.caratula}</h1>
+        <div class="meta">
+          ${[c.tribunal,c.fuero,c.juzgado,c.nro].filter(Boolean).join(' · ')}
+          ${c.cliente ? ` &nbsp;·&nbsp; 👤 ${c.cliente}` : ''}
+          &nbsp;·&nbsp; Impreso el ${new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'})}
+        </div>
+      </div>
+      ${secMov}
+      ${secTareas}
+      ${secGastos}
+      ${secCobros}
+      </body></html>
+    `
+    const win = window.open('', '_blank')
+    win.document.write(html)
+    win.document.close()
+    win.focus()
+    setTimeout(() => win.print(), 400)
   }
 
   if (!c) return <div className="empty-state"><p>Causa no encontrada</p></div>
@@ -255,12 +379,11 @@ export function CausaDetail({ id, navigate, store }) {
           {pptoBar}
         </div>
         <div style={{display:'flex',gap:'.4rem',flexWrap:'wrap'}}>
-          {/* ── Nuevos botones ── */}
           <button className="btn btn-primary btn-sm" onClick={openTareaModal}>＋ Tarea</button>
-          <button className="btn btn-primary btn-sm" style={{background:'var(--slate)',borderColor:'var(--slate)'}} onClick={openMovModal}>＋ Movimiento</button>
-          {/* ── Botones existentes ── */}
+          <button className="btn btn-primary btn-sm" style={{background:'var(--slate)',borderColor:'var(--slate)'}} onClick={()=>openMovModal()}>＋ Movimiento</button>
           <button className="btn btn-ghost btn-sm" style={{color:'var(--paper)',borderColor:'#555'}} onClick={()=>setGastoModal(true)}>+ Gasto</button>
           <button className="btn btn-ghost btn-sm" style={{color:'var(--paper)',borderColor:'#555'}} onClick={()=>setCobroModal(true)}>+ Cobro</button>
+          <button className="btn btn-ghost btn-sm" style={{color:'var(--paper)',borderColor:'#555'}} onClick={handlePrintCausa}>🖨</button>
           <button className="btn btn-danger btn-sm" onClick={()=>{if(confirm('¿Eliminar causa y todos sus datos?')){deleteCausa(id);navigate('causas')}}}>Eliminar</button>
         </div>
       </div>
@@ -281,28 +404,36 @@ export function CausaDetail({ id, navigate, store }) {
       </div>
 
       {/* Movimientos */}
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'.65rem'}}>
-        <h3 style={{fontFamily:'Playfair Display,serif',fontSize:'1.05rem'}}>Movimientos</h3>
-      </div>
-      {movs.length===0?<p style={{color:'var(--muted)',fontSize:'.83rem',marginBottom:'1.3rem'}}>Sin movimientos.</p>:(
-        <div style={{display:'flex',flexDirection:'column',gap:'.45rem',marginBottom:'1.3rem'}}>
-          {[...movs].reverse().map(r=>(
-            <div key={r.id} className="registro-entry">
-              <div className="registro-portal">{r.portal}</div>
-              <div className="registro-body">
-                <div className="registro-novedad">{r.novedad}</div>
-                {r.estrategia&&<div className="registro-estrategia">💡 {r.estrategia}</div>}
-                <div className="registro-meta"><span>{fmtF(r.fecha)}</span>{r.tiene_vencimiento&&r.vencimiento_texto&&<span className="registro-venc">{r.vencimiento_texto}</span>}</div>
+      <h3 style={{fontFamily:'Playfair Display,serif',fontSize:'1.05rem',marginBottom:'.65rem'}}>Movimientos</h3>
+      {movs.length===0
+        ? <p style={{color:'var(--muted)',fontSize:'.83rem',marginBottom:'1.3rem'}}>Sin movimientos.</p>
+        : (
+          <div style={{display:'flex',flexDirection:'column',gap:'.45rem',marginBottom:'1.3rem'}}>
+            {[...movs].reverse().map(r=>(
+              <div key={r.id} className="registro-entry">
+                <div className="registro-portal">{r.portal}</div>
+                <div className="registro-body">
+                  <div className="registro-novedad">{r.novedad}</div>
+                  {r.estrategia&&<div className="registro-estrategia">💡 {r.estrategia}</div>}
+                  <div className="registro-meta">
+                    <span>{fmtF(r.fecha)}</span>
+                    {r.tiene_vencimiento&&r.vencimiento_texto&&<span className="registro-venc">{r.vencimiento_texto}</span>}
+                  </div>
+                </div>
+                <div style={{display:'flex',flexDirection:'column',gap:'.3rem',alignSelf:'flex-start'}}>
+                  <button className="btn btn-ghost btn-xs" onClick={()=>openMovModal(r.id)}>✏</button>
+                  <button className="btn btn-ghost btn-xs" onClick={()=>{if(confirm('¿Eliminar movimiento?'))deleteRegistro(r.id)}}>🗑</button>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        )
+      }
 
       {/* Tareas de esta causa */}
       {(() => {
-        const tareasCausa = (store.tareas || []).filter(t => t.causa === id)
-        if (tareasCausa.length === 0) return null
+        const tareasCausa = (store.tareas||[]).filter(t=>t.causa===id)
+        if (!tareasCausa.length) return null
         const co = { urgente:0, alta:1, normal:2, baja:3 }
         const sorted = [...tareasCausa].sort((a,b)=>(co[a.criticidad]||2)-(co[b.criticidad]||2))
         const critMap = { urgente:'🔴', alta:'🟠', normal:'🟢', baja:'⚪' }
@@ -360,39 +491,16 @@ export function CausaDetail({ id, navigate, store }) {
             📁 {c.caratula.substring(0,60)}{c.caratula.length>60?'…':''}
           </div>
           <div className="form-row">
-            <div className="form-group" style={{flex:2}}>
-              <label>Título *</label>
-              <input className="form-control" value={tTitulo} onChange={e=>setTTitulo(e.target.value)} placeholder="Descripción de la tarea" />
-            </div>
+            <div className="form-group" style={{flex:2}}><label>Título *</label><input className="form-control" value={tTitulo} onChange={e=>setTTitulo(e.target.value)} placeholder="Descripción de la tarea" /></div>
           </div>
           <div className="form-row">
-            <div className="form-group">
-              <label>Criticidad</label>
-              <select className="form-control" value={tCrit} onChange={e=>setTCrit(e.target.value)}>
-                <option value="urgente">🔴 Urgente</option>
-                <option value="alta">🟠 Alta</option>
-                <option value="normal">🟢 Normal</option>
-                <option value="baja">⚪ Baja</option>
-              </select>
-            </div>
-            <div className="form-group">
-              <label>Estado</label>
-              <select className="form-control" value={tEstado} onChange={e=>setTEstado(e.target.value)}>
-                <option value="no-iniciada">⬜ No Iniciada</option>
-                <option value="en-curso">🔄 En Curso</option>
-              </select>
-            </div>
+            <div className="form-group"><label>Criticidad</label><select className="form-control" value={tCrit} onChange={e=>setTCrit(e.target.value)}><option value="urgente">🔴 Urgente</option><option value="alta">🟠 Alta</option><option value="normal">🟢 Normal</option><option value="baja">⚪ Baja</option></select></div>
+            <div className="form-group"><label>Estado</label><select className="form-control" value={tEstado} onChange={e=>setTEstado(e.target.value)}><option value="no-iniciada">⬜ No Iniciada</option><option value="en-curso">🔄 En Curso</option></select></div>
           </div>
           <div className="form-row">
-            <div className="form-group">
-              <label>Vencimiento</label>
-              <input type="date" className="form-control" value={tVenc} onChange={e=>{setTVenc(e.target.value);if(e.target.value)setTCrit('urgente')}} />
-            </div>
+            <div className="form-group"><label>Vencimiento</label><input type="date" className="form-control" value={tVenc} onChange={e=>{setTVenc(e.target.value);if(e.target.value)setTCrit('urgente')}} /></div>
           </div>
-          <div className="form-group" style={{marginBottom:'1rem'}}>
-            <label>Notas</label>
-            <textarea className="form-control" rows="2" value={tNotas} onChange={e=>setTNotas(e.target.value)} placeholder="Detalles..." />
-          </div>
+          <div className="form-group" style={{marginBottom:'1rem'}}><label>Notas</label><textarea className="form-control" rows="2" value={tNotas} onChange={e=>setTNotas(e.target.value)} placeholder="Detalles..." /></div>
           <div style={{display:'flex',justifyContent:'flex-end',gap:'.6rem'}}>
             <button className="btn btn-ghost" onClick={()=>setTareaModal(false)}>Cancelar</button>
             <button className="btn btn-primary" onClick={handleSaveTarea} disabled={tSaving}>{tSaving?'Guardando...':'Guardar'}</button>
@@ -400,9 +508,9 @@ export function CausaDetail({ id, navigate, store }) {
         </Modal>
       )}
 
-      {/* ── Modal Nuevo Movimiento ── */}
+      {/* ── Modal Movimiento (nuevo + editar) ── */}
       {movModal&&(
-        <Modal title="Nuevo Movimiento" onClose={()=>setMovModal(false)}>
+        <Modal title={movEditId ? 'Editar Movimiento' : 'Nuevo Movimiento'} onClose={()=>setMovModal(false)}>
           <div style={{marginBottom:'.8rem',padding:'.5rem .8rem',background:'var(--cream)',borderRadius:6,fontSize:'.78rem',color:'var(--muted)',fontFamily:'IBM Plex Mono,monospace'}}>
             📁 {c.caratula.substring(0,60)}{c.caratula.length>60?'…':''}
           </div>
@@ -430,6 +538,10 @@ export function CausaDetail({ id, navigate, store }) {
             </div>
             {mTieneVenc&&(
               <div>
+                {/* Vencimiento ya calculado (modo edición) */}
+                {mVencResult&&!mCalcMsg&&(
+                  <div className="vencimiento-result" style={{marginBottom:'.6rem'}}>{mVencResult.texto}</div>
+                )}
                 <div style={{display:'flex',alignItems:'center',gap:'.65rem',flexWrap:'wrap'}}>
                   <select className="form-control" value={mDias} onChange={e=>{setMDias(e.target.value);setMVencResult(null)}} style={{width:80}}>
                     <option value="">Días</option>
@@ -437,27 +549,30 @@ export function CausaDetail({ id, navigate, store }) {
                   </select>
                   <span style={{fontSize:'.78rem',color:'var(--muted)'}}>{mPortal==='SCBA'?'días corridos':'días hábiles'}</span>
                   <input type="date" className="form-control" value={mFechaInicio} onChange={e=>{setMFechaInicio(e.target.value);setMVencResult(null)}} style={{width:150}} />
-                  <button className="btn btn-ghost btn-sm" onClick={calcVencimientoMov}>Calcular</button>
+                  <button className="btn btn-ghost btn-sm" onClick={calcVencimientoMov}>Recalcular</button>
                 </div>
                 {mCalcMsg&&<div style={{fontSize:'.75rem',color:'var(--muted)',marginTop:'.3rem',fontFamily:'IBM Plex Mono,monospace'}}>{mCalcMsg}</div>}
-                {mVencResult&&<div className="vencimiento-result">{mVencResult.texto}</div>}
+                {mVencResult&&mCalcMsg&&<div className="vencimiento-result">{mVencResult.texto}</div>}
               </div>
             )}
           </div>
-          <div className="card" style={{background:'var(--cream)',marginBottom:'.9rem',padding:'.9rem'}}>
-            <div className="checkbox-row">
-              <input type="checkbox" checked={mCrearTarea} onChange={e=>setMCrearTarea(e.target.checked)} />
-              <label><strong>Generar tarea a partir de este movimiento</strong></label>
-            </div>
-            {mCrearTarea&&(
-              <div style={{marginTop:'.75rem'}}>
-                <div className="form-group">
-                  <label>Título de la tarea</label>
-                  <input className="form-control" value={mTareaTitulo} onChange={e=>setMTareaTitulo(e.target.value)} placeholder="Si vacío, se usa el texto de la novedad" />
+          {/* Opción generar tarea solo en nuevo movimiento */}
+          {!movEditId&&(
+            <div className="card" style={{background:'var(--cream)',marginBottom:'.9rem',padding:'.9rem'}}>
+              <div className="checkbox-row">
+                <input type="checkbox" checked={mCrearTarea} onChange={e=>setMCrearTarea(e.target.checked)} />
+                <label><strong>Generar tarea a partir de este movimiento</strong></label>
+              </div>
+              {mCrearTarea&&(
+                <div style={{marginTop:'.75rem'}}>
+                  <div className="form-group">
+                    <label>Título de la tarea</label>
+                    <input className="form-control" value={mTareaTitulo} onChange={e=>setMTareaTitulo(e.target.value)} placeholder="Si vacío, se usa el texto de la novedad" />
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
           <div style={{display:'flex',justifyContent:'flex-end',gap:'.6rem'}}>
             <button className="btn btn-ghost" onClick={()=>setMovModal(false)}>Cancelar</button>
             <button className="btn btn-primary" onClick={handleSaveMovimiento}>Guardar</button>
