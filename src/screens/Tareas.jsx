@@ -52,11 +52,70 @@ export function Tareas({ store }) {
     await patchTarea(t.id, { criticidad: next })
   }
 
+  const handlePrint = () => {
+    const co = { urgente:0, alta:1, normal:2, baja:3 }
+    const byVenc = (a,b) => { if(!a.vencimiento&&!b.vencimiento)return 0; if(!a.vencimiento)return 1; if(!b.vencimiento)return -1; return a.vencimiento.localeCompare(b.vencimiento) }
+    const activos = [...tareas.filter(t=>t.estado!=='completada')].sort((a,b)=>(co[a.criticidad]||2)-(co[b.criticidad]||2)||byVenc(a,b))
+    const critMap = { urgente:'🔴 URGENTE', alta:'🟠 ALTA', normal:'🟢 NORMAL', baja:'⚪ BAJA' }
+    const estadoMap = { 'no-iniciada':'No iniciada', 'en-curso':'En curso' }
+    const sections = [
+      { label: '🔴 Urgentes',     items: activos.filter(t=>t.criticidad==='urgente') },
+      { label: '🔄 En curso',     items: activos.filter(t=>t.criticidad!=='urgente'&&t.estado==='en-curso') },
+      { label: '⬜ No iniciadas', items: activos.filter(t=>t.criticidad!=='urgente'&&t.estado==='no-iniciada') },
+    ]
+
+    const rows = sections.flatMap(s => {
+      if (!s.items.length) return []
+      return [
+        `<tr><td colspan="5" style="background:#f0ebe0;font-weight:700;font-size:.75rem;padding:.4rem .7rem;letter-spacing:.06em;text-transform:uppercase;color:#555">${s.label}</td></tr>`,
+        ...s.items.map(t => `
+          <tr>
+            <td style="font-weight:600;font-size:.85rem">${t.titulo}</td>
+            <td style="font-size:.75rem;color:#666">${t.causa ? getCNombre(t.causa) : '—'}</td>
+            <td style="font-size:.75rem;font-weight:700">${critMap[t.criticidad]||'NORMAL'}</td>
+            <td style="font-size:.75rem">${estadoMap[t.estado]||t.estado}</td>
+            <td style="font-size:.75rem;color:${t.vencimiento?'#c0392b':'#999'};font-weight:${t.vencimiento?'700':'400'}">${t.vencimiento?fmtF(t.vencimiento):'—'}</td>
+          </tr>
+          ${t.notas?`<tr><td colspan="5" style="font-size:.72rem;color:#888;font-style:italic;padding:.1rem .7rem .4rem">↳ ${t.notas}</td></tr>`:''}
+        `)
+      ]
+    })
+
+    const html = `
+      <!DOCTYPE html><html><head>
+      <meta charset="UTF-8">
+      <title>Tareas Activas — I|A Gestión Legal</title>
+      <style>
+        body { font-family: 'IBM Plex Sans', Arial, sans-serif; padding: 2rem; color: #111; font-size: 14px; }
+        h1 { font-family: Georgia, serif; font-size: 1.5rem; margin-bottom: .2rem; }
+        .sub { font-size: .75rem; color: #888; margin-bottom: 1.5rem; font-family: monospace; }
+        table { width: 100%; border-collapse: collapse; }
+        th { background: #0f0e0c; color: #d4a843; text-align: left; padding: .5rem .7rem; font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; }
+        td { padding: .45rem .7rem; border-bottom: 1px solid #e5e0d8; vertical-align: top; }
+        tr:last-child td { border-bottom: none; }
+        @media print { body { padding: 0; } }
+      </style>
+      </head><body>
+      <h1>I|A — Tareas Activas</h1>
+      <div class="sub">Generado el ${new Date().toLocaleDateString('es-AR', { weekday:'long', year:'numeric', month:'long', day:'numeric' }).toUpperCase()} · Total: ${activos.length} tareas</div>
+      <table>
+        <thead><tr><th>Tarea</th><th>Causa</th><th>Criticidad</th><th>Estado</th><th>Vencimiento</th></tr></thead>
+        <tbody>${rows.join('')}</tbody>
+      </table>
+      </body></html>
+    `
+    const win = window.open('', '_blank')
+    win.document.write(html)
+    win.document.close()
+    win.focus()
+    setTimeout(() => win.print(), 400)
+  }
+
   const co = { urgente:0, alta:1, normal:2, baja:3 }
   const byVenc = (a,b) => { if(!a.vencimiento&&!b.vencimiento)return 0; if(!a.vencimiento)return 1; if(!b.vencimiento)return -1; return a.vencimiento.localeCompare(b.vencimiento) }
   const srt = arr => [...arr].sort((a,b)=>(co[a.criticidad]||2)-(co[b.criticidad]||2)||byVenc(a,b))
 
-  const activos   = srt(tareas.filter(t=>t.estado!=='completada'))
+  const activos    = srt(tareas.filter(t=>t.estado!=='completada'))
   const archivados = [...tareas.filter(t=>t.estado==='completada')].reverse()
 
   const taskCard = (t) => {
@@ -93,7 +152,10 @@ export function Tareas({ store }) {
     <div>
       <div className="page-header">
         <div className="page-title">Tareas <small>GESTIÓN DE PENDIENTES</small></div>
-        <button className="btn btn-primary" onClick={()=>openModal()}>＋ Nueva</button>
+        <div style={{display:'flex',gap:'.5rem'}}>
+          <button className="btn btn-ghost" onClick={handlePrint}>🖨 Imprimir</button>
+          <button className="btn btn-primary" onClick={()=>openModal()}>＋ Nueva</button>
+        </div>
       </div>
       <div className="tabs">
         <div className={`tab ${tab==='activas'?'active':''}`} onClick={()=>setTab('activas')}>Activas / En Curso</div>
