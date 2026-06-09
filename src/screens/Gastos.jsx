@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { saveGasto, deleteGasto, updateTramite, deleteTramite, addTramite, resetTramites } from '../lib/store.js'
 import { uid, dateFmt, fmtF, TRAMITES_DEFAULT } from '../lib/supabase.js'
+import { imprimirRecibo, nextReciboNro, fmtNro } from '../lib/recibo.js'
 import Modal from '../components/Modal.jsx'
 
 export default function Gastos({ store }) {
@@ -38,6 +39,23 @@ export default function Gastos({ store }) {
     setModal(false)
   }
 
+  // Emite (o re-imprime) el recibo de un pago. Asigna número la primera vez.
+  const emitirRecibo = async (g) => {
+    let nro = g.recibo_nro
+    if (!nro) {
+      nro = nextReciboNro(gastos)
+      await saveGasto({ ...g, recibo_nro: nro })
+    }
+    imprimirRecibo({
+      tipo: 'pago',
+      nroFmt: fmtNro('PAG', nro),
+      fecha: g.fecha || dateFmt(new Date()),
+      monto: g.total,
+      moneda: 'ARS',
+      concepto: g.tramite_nombre,
+    })
+  }
+
   let list = filtro ? gastos.filter(g=>g.causa===filtro) : gastos
   list = [...list].reverse()
   const totFiltrado = list.reduce((s,g)=>s+(g.total||0),0)
@@ -69,12 +87,16 @@ export default function Gastos({ store }) {
                 {list.map(g=>(
                   <tr key={g.id}>
                     <td style={{maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{getCNombre(g.causa)}</td>
-                    <td>{g.tramite_nombre}</td>
+                    <td>
+                      {g.tramite_nombre}
+                      {g.recibo_nro ? <span style={{fontFamily:'IBM Plex Mono, monospace',fontSize:'.68rem',color:'var(--muted)',marginLeft:'.4rem'}}>{fmtNro('PAG', g.recibo_nro)}</span> : null}
+                    </td>
                     <td className="num">{g.cant}</td>
                     <td className="num">${(g.precio_u||0).toLocaleString('es-AR')}</td>
                     <td className="num" style={{fontWeight:700}}>${(g.total||0).toLocaleString('es-AR')}</td>
                     <td>{g.fecha?fmtF(g.fecha):'-'}</td>
                     <td>
+                      <button className="btn btn-ghost btn-xs" title="Emitir recibo" onClick={()=>emitirRecibo(g)}>🧾</button>
                       <button className="btn btn-ghost btn-xs" onClick={()=>openModal(g.id)}>✏</button>
                       <button className="btn btn-ghost btn-xs" onClick={()=>{if(confirm('¿Eliminar?'))deleteGasto(g.id)}}>🗑</button>
                     </td>
