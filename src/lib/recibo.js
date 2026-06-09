@@ -9,12 +9,13 @@ export const MIS_DATOS = {
   subtitulo: 'Abogado',
   matriculas: 'T° 120  F° 824  —  C.P.A.C.F.   ·   T° LVII  F° 344  —  C.A.S.I.',
 
-  // Domicilio y lugar de emisión según el fuero de la causa
+  // Domicilio y lugar de emisión según el TRIBUNAL de la causa (campo causa.tribunal)
   domicilios: {
-    PJN:  { dir: 'Paraná N° 597, Piso 2, Of. «15», C.A.B.A.',          lugar: 'C.A.B.A.' },
-    SCBA: { dir: 'Adolfo Alsina N° 1.756, Florida, Vicente López.',     lugar: 'Vicente López' },
+    PJN:  { dir: 'Paraná N° 597, Piso 2, Of. «15», C.A.B.A.',        lugar: 'C.A.B.A.' },
+    SCBA: { dir: 'Adolfo Alsina N° 1.756, Florida, Vicente López.',   lugar: 'Vicente López' },
+    EJE:  { dir: 'Paraná N° 597, Piso 2, Of. «15», C.A.B.A.',        lugar: 'C.A.B.A.' }, // CABA (ajustar si constituís otro)
   },
-  defaultFuero: 'PJN',   // cuando el cobro/pago no tiene causa asociada
+  defaultTribunal: 'PJN',   // cuando el cobro/pago no tiene causa asociada
 }
 // ────────────────────────────────────────────────────────────────
 
@@ -28,16 +29,6 @@ export function nextReciboNro(items) {
 }
 export function fmtNro(prefijo, n) {
   return `${prefijo}-${String(n).padStart(4, '0')}`
-}
-
-// Deduce el fuero (PJN | SCBA | null) a partir de la causa.
-// ⚠️ Ajustar el campo según cómo lo guardes en la causa (ver mensaje del chat).
-export function fueroDeCausa(causa) {
-  if (!causa) return null
-  const f = (causa.fuero || causa.jurisdiccion || causa.organismo || causa.juzgado || '').toString().toUpperCase()
-  if (f.includes('SCBA') || f.includes('PROVINC') || f.includes('LA PLATA') || f.includes('DEPARTAMENTAL')) return 'SCBA'
-  if (f.includes('PJN') || f.includes('NACIONAL') || f.includes('FEDERAL') || f.includes('CABA') || f.includes('CIVIL') || f.includes('COMERCIAL')) return 'PJN'
-  return null
 }
 
 // ── Monto en letras ─────────────────────────────────────────────
@@ -83,8 +74,8 @@ export function montoEnLetras(monto, moneda = 'ARS') {
 // ────────────────────────────────────────────────────────────────
 
 // Abre el recibo en una ventana nueva, listo para imprimir / guardar como PDF.
-// { tipo: 'cobro'|'pago', nroFmt, fecha, monto, moneda, concepto, fuero }
-export function imprimirRecibo({ tipo, nroFmt, fecha, monto, moneda = 'ARS', concepto, fuero }) {
+// { tipo: 'cobro'|'pago', nroFmt, fecha, monto, moneda, concepto, tribunal }
+export function imprimirRecibo({ tipo, nroFmt, fecha, monto, moneda = 'ARS', concepto, tribunal }) {
   const esCobro  = tipo === 'cobro'
   const simbolo  = moneda === 'USD' ? 'U$S' : '$'
   const montoTxt = `${simbolo} ${(monto || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -92,7 +83,7 @@ export function imprimirRecibo({ tipo, nroFmt, fecha, monto, moneda = 'ARS', con
   const intro = esCobro ? 'Recibí la suma de:' : 'Se deja constancia del pago de la suma de:'
   const firmaLabel = esCobro ? MIS_DATOS.nombre : 'Recibí conforme  —  firma y aclaración'
 
-  const dom = MIS_DATOS.domicilios[fuero] || MIS_DATOS.domicilios[MIS_DATOS.defaultFuero]
+  const dom = MIS_DATOS.domicilios[tribunal] || MIS_DATOS.domicilios[MIS_DATOS.defaultTribunal]
   const fechaTxt = fecha ? fmtF(fecha) : fmtF(new Date().toISOString().slice(0, 10))
 
   const w = window.open('', '_blank')
@@ -121,7 +112,6 @@ export function imprimirRecibo({ tipo, nroFmt, fecha, monto, moneda = 'ARS', con
 
   .r-tit  { font-size: 18px; font-weight: bold; letter-spacing: .1em; }
   .r-meta { font-size: 11px; margin-top: 9px; line-height: 1.8; }
-  .r-meta .k { color: #000; }
   .r-meta .v { font-weight: bold; }
 
   .body { padding: 16px 14px; }
@@ -151,9 +141,9 @@ export function imprimirRecibo({ tipo, nroFmt, fecha, monto, moneda = 'ARS', con
     <div class="col-r">
       <div class="r-tit">RECIBO</div>
       <div class="r-meta">
-        <span class="k">N°: </span><span class="v">${nroFmt}</span><br>
-        <span class="k">Fecha: </span><span class="v">${fechaTxt}</span><br>
-        <span class="k">Lugar: </span><span class="v">${dom.lugar}</span>
+        N°: <span class="v">${nroFmt}</span><br>
+        Fecha: <span class="v">${fechaTxt}</span><br>
+        Lugar: <span class="v">${dom.lugar}</span>
       </div>
     </div>
   </div>
