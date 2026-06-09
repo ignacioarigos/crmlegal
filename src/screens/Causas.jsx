@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { saveCausa, deleteCausa, saveCobro, saveGasto, saveTarea, saveRegistro, updateRegistro, deleteRegistro } from '../lib/store.js'
 import { uid, dateFmt, fmtF, FUEROS_CIVILES, sumarHabiles, sumarCorridos, fechaLarga } from '../lib/supabase.js'
 import Modal from '../components/Modal.jsx'
+import { imprimirRecibo, nextReciboNro, fmtNro } from '../lib/recibo.js'
 
 export function Causas({ navigate, store }) {
   const { causas, gastos } = store
@@ -367,6 +368,18 @@ export function CausaDetail({ id, navigate, store }) {
     setGastoModal(false); setGTramiteId(''); setGCant(1); setGPrecio('')
   }
 
+  // Emitir recibo desde el detalle de la causa (usa el tribunal de la causa para el domicilio)
+  const emitirReciboCobro = async (cb) => {
+    let nro = cb.recibo_nro
+    if (!nro) { nro = nextReciboNro(cobros); await saveCobro({ ...cb, recibo_nro: nro }) }
+    imprimirRecibo({ tipo:'cobro', nroFmt: fmtNro('REC', nro), fecha: cb.fecha, monto: cb.monto, moneda: cb.moneda||'ARS', concepto: cb.concepto, tribunal: c.tribunal })
+  }
+  const emitirReciboGasto = async (g) => {
+    let nro = g.recibo_nro
+    if (!nro) { nro = nextReciboNro(gastos); await saveGasto({ ...g, recibo_nro: nro }) }
+    imprimirRecibo({ tipo:'pago', nroFmt: fmtNro('PAG', nro), fecha: g.fecha||dateFmt(new Date()), monto: g.total, moneda:'ARS', concepto: g.tramite_nombre, tribunal: c.tribunal })
+  }
+
   return (
     <div>
       <div style={{marginBottom:'.9rem'}}><button className="btn btn-ghost btn-sm" onClick={()=>navigate('causas')}>← Volver</button></div>
@@ -464,9 +477,9 @@ export function CausaDetail({ id, navigate, store }) {
       {gList.length===0?<p style={{color:'var(--muted)',fontSize:'.83rem',marginBottom:'1.3rem'}}>Sin gastos.</p>:(
         <div className="table-wrapper" style={{marginBottom:'1.3rem'}}>
           <table>
-            <thead><tr><th>Trámite</th><th>Cant.</th><th>P.U.</th><th>Total</th><th>Fecha</th></tr></thead>
-            <tbody>{gList.map(g=><tr key={g.id}><td>{g.tramite_nombre}</td><td className="num">{g.cant}</td><td className="num">${(g.precio_u||0).toLocaleString('es-AR')}</td><td className="num" style={{fontWeight:700}}>${(g.total||0).toLocaleString('es-AR')}</td><td>{g.fecha?fmtF(g.fecha):'-'}</td></tr>)}</tbody>
-            <tfoot><tr className="tfoot-row"><td colSpan="3" style={{padding:'.6rem .9rem'}}>TOTAL</td><td className="num" style={{padding:'.6rem .9rem',fontWeight:700}}>${tot.toLocaleString('es-AR')}</td><td></td></tr></tfoot>
+            <thead><tr><th>Trámite</th><th>Cant.</th><th>P.U.</th><th>Total</th><th>Fecha</th><th></th></tr></thead>
+            <tbody>{gList.map(g=><tr key={g.id}><td>{g.tramite_nombre}{g.recibo_nro?<span style={{fontFamily:'IBM Plex Mono,monospace',fontSize:'.68rem',color:'var(--muted)',marginLeft:'.4rem'}}>{fmtNro('PAG',g.recibo_nro)}</span>:null}</td><td className="num">{g.cant}</td><td className="num">${(g.precio_u||0).toLocaleString('es-AR')}</td><td className="num" style={{fontWeight:700}}>${(g.total||0).toLocaleString('es-AR')}</td><td>{g.fecha?fmtF(g.fecha):'-'}</td><td><button className="btn btn-ghost btn-xs" title="Emitir recibo" onClick={()=>emitirReciboGasto(g)}>🧾</button></td></tr>)}</tbody>
+            <tfoot><tr className="tfoot-row"><td colSpan="3" style={{padding:'.6rem .9rem'}}>TOTAL</td><td className="num" style={{padding:'.6rem .9rem',fontWeight:700}}>${tot.toLocaleString('es-AR')}</td><td colSpan="2"></td></tr></tfoot>
           </table>
         </div>
       )}
@@ -476,9 +489,9 @@ export function CausaDetail({ id, navigate, store }) {
       {cbList.length===0?<p style={{color:'var(--muted)',fontSize:'.83rem'}}>Sin cobros.</p>:(
         <div className="table-wrapper">
           <table>
-            <thead><tr><th>Concepto</th><th>Moneda</th><th>Fecha</th><th>Monto</th></tr></thead>
+            <thead><tr><th>Concepto</th><th>Moneda</th><th>Fecha</th><th>Monto</th><th></th></tr></thead>
             <tbody>{[...cbList].reverse().map(cb=>{const isUSD=cb.moneda==='USD';return(
-              <tr key={cb.id}><td>{cb.concepto}</td><td><span className={`cobro-moneda-badge ${isUSD?'usd':'ars'}`}>{isUSD?'USD':'ARS'}</span></td><td>{fmtF(cb.fecha)}</td><td className="num" style={{fontWeight:700,color:isUSD?'var(--usd)':'var(--ok)'}}>{isUSD?'U$S ':'$'}{(cb.monto||0).toLocaleString('es-AR')}</td></tr>
+              <tr key={cb.id}><td>{cb.concepto}{cb.recibo_nro?<span style={{fontFamily:'IBM Plex Mono,monospace',fontSize:'.68rem',color:'var(--muted)',marginLeft:'.4rem'}}>{fmtNro('REC',cb.recibo_nro)}</span>:null}</td><td><span className={`cobro-moneda-badge ${isUSD?'usd':'ars'}`}>{isUSD?'USD':'ARS'}</span></td><td>{fmtF(cb.fecha)}</td><td className="num" style={{fontWeight:700,color:isUSD?'var(--usd)':'var(--ok)'}}>{isUSD?'U$S ':'$'}{(cb.monto||0).toLocaleString('es-AR')}</td><td><button className="btn btn-ghost btn-xs" title="Emitir recibo" onClick={()=>emitirReciboCobro(cb)}>🧾</button></td></tr>
             )})}</tbody>
           </table>
         </div>
