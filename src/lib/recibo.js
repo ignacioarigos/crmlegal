@@ -7,14 +7,15 @@ import { fmtF } from './supabase.js'
 export const MIS_DATOS = {
   nombre:    'Ignacio Arigós',
   subtitulo: 'Abogado',
-  matriculas: 'T° 120  F° 824  —  C.P.A.C.F.   
-    T° LVII  F° 344  —  C.A.S.I.',
+  // Separamos las matrículas usando un salto de línea HTML <br>
+  matriculas: 'T° 120  F° 824  —  C.P.A.C.F.<br>T° LVII  F° 344  —  C.A.S.I.',
 
   // Domicilio y lugar de emisión según el TRIBUNAL de la causa (campo causa.tribunal)
+  // Corregimos la entidad "&quot;" para usar comillas dobles comunes o tipográficas directamente
   domicilios: {
-    PJN:  { dir: 'Paraná N° 597, Piso 2, Of. &quot15&quot;, C.A.B.A.',        lugar: 'C.A.B.A.' },
+    PJN:  { dir: 'Paraná N° 597, Piso 2, Of. "15", C.A.B.A.',        lugar: 'C.A.B.A.' },
     SCBA: { dir: 'Adolfo Alsina N° 1.756, Florida, Vicente López.',   lugar: 'Vicente López' },
-    EJE:  { dir: 'Paraná N° 597, Piso 2, Of. «15», C.A.B.A.',        lugar: 'C.A.B.A.' }, // CABA (ajustar si constituís otro)
+    EJE:  { dir: 'Paraná N° 597, Piso 2, Of. "15", C.A.B.A.',        lugar: 'C.A.B.A.' }, 
   },
   defaultTribunal: 'PJN',   // cuando el cobro/pago no tiene causa asociada
 }
@@ -74,8 +75,6 @@ export function montoEnLetras(monto, moneda = 'ARS') {
 }
 // ────────────────────────────────────────────────────────────────
 
-// Abre el recibo en una ventana nueva, listo para imprimir / guardar como PDF.
-// { tipo: 'cobro'|'pago', nroFmt, fecha, monto, moneda, concepto, tribunal }
 export function imprimirRecibo({ tipo, nroFmt, fecha, monto, moneda = 'ARS', concepto, tribunal }) {
   const esCobro  = tipo === 'cobro'
   const simbolo  = moneda === 'USD' ? 'U$S' : '$'
@@ -104,7 +103,6 @@ export function imprimirRecibo({ tipo, nroFmt, fecha, monto, moneda = 'ARS', con
     print-color-adjust: exact;
   }
   
-  /* Contenedor Principal: Bordes más estilizados y sutiles */
   .doc { 
     max-width: 680px; 
     margin: 0 auto; 
@@ -112,11 +110,19 @@ export function imprimirRecibo({ tipo, nroFmt, fecha, monto, moneda = 'ARS', con
     background: #fff;
   }
 
-  /* Encabezado */
+  /* Encabezado: Añadimos flexbox vertical para centrar el bloque izquierdo */
   .top { display: flex; align-items: stretch; border-bottom: 1px solid #333; background: #fafafa; }
-  .col-em { flex: 1.2; padding: 18px 20px; }
   
-  /* El recuadro de la 'R' ahora es un divisor elegante */
+  /* Ajuste de alineación centralizada para tus datos */
+  .col-em { 
+    flex: 1.2; 
+    padding: 18px 20px; 
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    text-align: center; 
+  }
+  
   .box-tipo { 
     width: 55px; 
     border-left: 1px solid #333; 
@@ -135,19 +141,18 @@ export function imprimirRecibo({ tipo, nroFmt, fecha, monto, moneda = 'ARS', con
   /* Datos del Emisor */
   .em-nom { font-size: 18px; font-weight: 700; color: #111; letter-spacing: -0.02em; }
   .em-sub { font-size: 10px; letter-spacing: .18em; text-transform: uppercase; margin-top: 3px; color: #666; font-weight: 600; }
-  .em-mat { font-size: 10px; margin-top: 12px; line-height: 1.5; color: #444; }
-  .em-dom { font-size: 10.5px; margin-top: 4px; color: #444; }
+  .em-mat { font-size: 10px; margin-top: 10px; line-height: 1.5; color: #444; }
+  .em-dom { font-size: 10.5px; margin-top: 6px; color: #444; }
 
   /* Datos del Recibo */
   .r-tit  { font-size: 16px; font-weight: 700; letter-spacing: .15em; color: #111; text-transform: uppercase; }
   .r-meta { font-size: 11.5px; margin-top: 10px; line-height: 1.8; color: #333; }
   .r-meta .v { font-weight: 600; color: #000; }
 
-  /* Cuerpo del documento con tipografía serif para mayor elegancia legal */
+  /* Cuerpo del documento */
   .body { padding: 32px 28px; font-family: Georgia, serif; }
   .intro { font-size: 13px; color: #444; font-style: italic; margin-bottom: 12px; }
   
-  /* Caja de monto destacado */
   .imp-box { 
     display: inline-block; 
     background: #f3f4f6; 
@@ -162,7 +167,8 @@ export function imprimirRecibo({ tipo, nroFmt, fecha, monto, moneda = 'ARS', con
   
   .letras { font-size: 13px; font-style: italic; margin: 12px 0 28px; color: #222; }
   
-  /* Concepto */
+  /* Concepto: Ajustado para centrar etiquetas y contenidos */
+  .concepto-container { text-align: center; margin-top: 15px; }
   .concepto-k { font-size: 12px; color: #555; font-family: system-ui, sans-serif; text-transform: uppercase; letter-spacing: 0.05em; }
   .concepto-v { 
     font-size: 15px; 
@@ -170,12 +176,12 @@ export function imprimirRecibo({ tipo, nroFmt, fecha, monto, moneda = 'ARS', con
     font-family: system-ui, sans-serif;
     border-bottom: 1px dotted #999; 
     padding-bottom: 6px; 
-    margin-top: 6px; 
+    margin: 6px auto 0 auto; 
     min-height: 28px; 
     color: #111;
+    max-width: 85%;
   }
   
-  /* Firma al pie bien balanceada */
   .firma { margin-top: 90px; text-align: center; }
   .firma .fl { 
     border-top: 1px solid #444; 
@@ -216,10 +222,11 @@ export function imprimirRecibo({ tipo, nroFmt, fecha, monto, moneda = 'ARS', con
     <div class="imp-box">${montoTxt}<span class="mon">(${moneda})</span></div>
     <div class="letras">Son ${letrasTxt}.</div>
 
-    <div class="concepto-k">En concepto de:</div>
-    <div class="concepto-v">${concepto || '—'}</div>
+    <div class="concepto-container">
+      <div class="concepto-k">En concepto de:</div>
+      <div class="concepto-v">${concepto || '—'}</div>
+    </div>
 
-    
     <div class="firma"><div class="fl">${firmaLabel}</div></div>
   </div>
 
