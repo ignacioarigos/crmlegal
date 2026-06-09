@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { saveCobro, deleteCobro } from '../lib/store.js'
 import { uid, dateFmt, fmtF } from '../lib/supabase.js'
+import { imprimirRecibo, nextReciboNro, fmtNro } from '../lib/recibo.js'
 import Modal from '../components/Modal.jsx'
 
 export default function Cobros({ store }) {
@@ -48,6 +49,23 @@ export default function Cobros({ store }) {
   const handleDelete = async (id) => {
     if (!confirm('¿Eliminar cobro?')) return
     await deleteCobro(id)
+  }
+
+  // Emite (o re-imprime) el recibo de un cobro. Asigna número la primera vez.
+  const emitirRecibo = async (c) => {
+    let nro = c.recibo_nro
+    if (!nro) {
+      nro = nextReciboNro(cobros)
+      await saveCobro({ ...c, recibo_nro: nro })
+    }
+    imprimirRecibo({
+      tipo: 'cobro',
+      nroFmt: fmtNro('REC', nro),
+      fecha: c.fecha,
+      monto: c.monto,
+      moneda: c.moneda || 'ARS',
+      concepto: c.concepto,
+    })
   }
 
   let list = [...cobros].sort((a,b)=>b.fecha.localeCompare(a.fecha))
@@ -123,12 +141,13 @@ export default function Cobros({ store }) {
                     <div style={{flex:1,minWidth:140}}>
                       <div style={{fontWeight:600,fontSize:'.88rem'}}>{c.concepto}</div>
                       <div style={{fontSize:'.72rem',color:'var(--muted)',marginTop:'.2rem',fontFamily:'IBM Plex Mono, monospace'}}>
-                        {fmtF(c.fecha)}{c.causa ? ' · ' + getCNombre(c.causa) : ''}
+                        {fmtF(c.fecha)}{c.causa ? ' · ' + getCNombre(c.causa) : ''}{c.recibo_nro ? ' · ' + fmtNro('REC', c.recibo_nro) : ''}
                       </div>
                     </div>
                     <div className={`cobro-monto ${isUSD?'usd':''}`}>
                       {isUSD ? 'U$S ' : '$'}{(c.monto||0).toLocaleString('es-AR')}
                     </div>
+                    <button className="btn btn-ghost btn-xs" title="Emitir recibo" onClick={() => emitirRecibo(c)}>🧾</button>
                     <button className="btn btn-ghost btn-xs" onClick={() => openModal(c.id)}>✏</button>
                     <button className="btn btn-ghost btn-xs" onClick={() => handleDelete(c.id)}>🗑</button>
                   </div>
