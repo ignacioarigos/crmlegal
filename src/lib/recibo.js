@@ -2,21 +2,23 @@
 import { fmtF } from './supabase.js'
 
 // ╔══════════════════════════════════════════════════════════════╗
-// ║  TUS DATOS — COMPLETÁ ESTO UNA SOLA VEZ                        ║
-// ║  (no sale nada del CRM; lo que pongas acá va en el encabezado) ║
+// ║  TUS DATOS — encabezado del recibo                            ║
 // ╚══════════════════════════════════════════════════════════════╝
 export const MIS_DATOS = {
-  nombre:    'Dr. Ignacio Arigós',
+  nombre:    'Ignacio Arigós',
   subtitulo: 'Abogado',
-  matricula: 'T° XX  F° XXX  —  C.A.S.I.',        // ← completar
-  domicilio: 'Domicilio del estudio, Localidad, Pcia. de Bs. As.', // ← completar
-  cuit:      '',                                   // ← completar (opcional, dejar '' para ocultar)
-  contacto:  '',                                   // ← Tel / email (opcional)
-  localidad: 'San Isidro',                         // ← para la línea "Localidad, fecha"
+  matriculas: 'T° 120  F° 824  —  C.P.A.C.F.   ·   T° LVII  F° 344  —  C.A.S.I.',
+
+  // Domicilio y lugar de emisión según el fuero de la causa
+  domicilios: {
+    PJN:  { dir: 'Paraná N° 597, Piso 2, Of. «15», C.A.B.A.',          lugar: 'C.A.B.A.' },
+    SCBA: { dir: 'Adolfo Alsina N° 1.756, Florida, Vicente López.',     lugar: 'Vicente López' },
+  },
+  defaultFuero: 'PJN',   // cuando el cobro/pago no tiene causa asociada
 }
 // ────────────────────────────────────────────────────────────────
 
-// Próximo número correlativo a partir de los registros existentes.
+// Número correlativo
 export function nextReciboNro(items) {
   const max = (items || []).reduce((m, x) => {
     const n = parseInt(x?.recibo_nro, 10)
@@ -24,10 +26,18 @@ export function nextReciboNro(items) {
   }, 0)
   return max + 1
 }
-
-// Formatea el número: fmtNro('REC', 7) => 'REC-0007'
 export function fmtNro(prefijo, n) {
   return `${prefijo}-${String(n).padStart(4, '0')}`
+}
+
+// Deduce el fuero (PJN | SCBA | null) a partir de la causa.
+// ⚠️ Ajustar el campo según cómo lo guardes en la causa (ver mensaje del chat).
+export function fueroDeCausa(causa) {
+  if (!causa) return null
+  const f = (causa.fuero || causa.jurisdiccion || causa.organismo || causa.juzgado || '').toString().toUpperCase()
+  if (f.includes('SCBA') || f.includes('PROVINC') || f.includes('LA PLATA') || f.includes('DEPARTAMENTAL')) return 'SCBA'
+  if (f.includes('PJN') || f.includes('NACIONAL') || f.includes('FEDERAL') || f.includes('CABA') || f.includes('CIVIL') || f.includes('COMERCIAL')) return 'PJN'
+  return null
 }
 
 // ── Monto en letras ─────────────────────────────────────────────
@@ -36,51 +46,36 @@ const UNIDADES = ['','uno','dos','tres','cuatro','cinco','seis','siete','ocho','
   'veintiuno','veintidós','veintitrés','veinticuatro','veinticinco','veintiséis','veintisiete','veintiocho','veintinueve']
 const DECENAS  = ['','','','treinta','cuarenta','cincuenta','sesenta','setenta','ochenta','noventa']
 const CENTENAS = ['','ciento','doscientos','trescientos','cuatrocientos','quinientos','seiscientos','setecientos','ochocientos','novecientos']
-
-// Apócope del "uno" final antes de un sustantivo: uno→un, veintiuno→veintiún
-function apocope(palabras) {
-  return palabras.replace(/veintiuno$/, 'veintiún').replace(/\buno$/, 'un')
-}
-
+function apocope(p) { return p.replace(/veintiuno$/, 'veintiún').replace(/\buno$/, 'un') }
 function menor1000(n) {
   if (n === 0) return ''
   if (n === 100) return 'cien'
   let out = ''
-  const c = Math.floor(n / 100)
-  const r = n % 100
+  const c = Math.floor(n / 100), r = n % 100
   if (c > 0) out += CENTENAS[c]
   if (r > 0) {
     if (out) out += ' '
     if (r < 30) out += UNIDADES[r]
-    else {
-      const d = Math.floor(r / 10), u = r % 10
-      out += DECENAS[d] + (u > 0 ? ' y ' + UNIDADES[u] : '')
-    }
+    else { const d = Math.floor(r / 10), u = r % 10; out += DECENAS[d] + (u > 0 ? ' y ' + UNIDADES[u] : '') }
   }
   return out
 }
-
 export function numeroALetras(n) {
   n = Math.floor(Math.abs(n || 0))
   if (n === 0) return 'cero'
-  const millones = Math.floor(n / 1000000)
-  const miles    = Math.floor((n % 1000000) / 1000)
-  const cientos  = n % 1000
+  const millones = Math.floor(n / 1000000), miles = Math.floor((n % 1000000) / 1000), cientos = n % 1000
   let out = ''
   if (millones > 0) out += (millones === 1 ? 'un millón' : apocope(numeroALetras(millones)) + ' millones')
   if (miles > 0)    out += (out ? ' ' : '') + (miles === 1 ? 'mil' : apocope(menor1000(miles)) + ' mil')
   if (cientos > 0)  out += (out ? ' ' : '') + menor1000(cientos)
   return out.trim()
 }
-
 export function montoEnLetras(monto, moneda = 'ARS') {
-  const m = Math.abs(monto || 0)
-  const entero = Math.floor(m)
-  const cent = Math.round((m - entero) * 100)
+  const m = Math.abs(monto || 0), entero = Math.floor(m), cent = Math.round((m - entero) * 100)
   const nombre = moneda === 'USD'
     ? (entero === 1 ? 'dólar estadounidense' : 'dólares estadounidenses')
     : (entero === 1 ? 'peso' : 'pesos')
-  const usaDe = entero >= 1000000 && entero % 1000000 === 0   // "un millón DE pesos"
+  const usaDe = entero >= 1000000 && entero % 1000000 === 0
   const letras = apocope(numeroALetras(entero))
   const frase = `${letras}${usaDe ? ' de' : ''} ${nombre} con ${String(cent).padStart(2, '0')}/100`
   return frase.charAt(0).toUpperCase() + frase.slice(1)
@@ -88,23 +83,17 @@ export function montoEnLetras(monto, moneda = 'ARS') {
 // ────────────────────────────────────────────────────────────────
 
 // Abre el recibo en una ventana nueva, listo para imprimir / guardar como PDF.
-// tipo: 'cobro' | 'pago'
-export function imprimirRecibo({ tipo, nroFmt, fecha, monto, moneda = 'ARS', concepto }) {
+// { tipo: 'cobro'|'pago', nroFmt, fecha, monto, moneda, concepto, fuero }
+export function imprimirRecibo({ tipo, nroFmt, fecha, monto, moneda = 'ARS', concepto, fuero }) {
   const esCobro  = tipo === 'cobro'
   const simbolo  = moneda === 'USD' ? 'U$S' : '$'
   const montoTxt = `${simbolo} ${(monto || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   const letrasTxt = montoEnLetras(monto, moneda)
-  const titulo   = esCobro ? 'RECIBO' : 'RECIBO DE PAGO'
-  const introTxt = esCobro
-    ? `Recibí la suma de <strong>${montoTxt}</strong> (${moneda}), en concepto de:`
-    : `Se deja constancia del pago de la suma de <strong>${montoTxt}</strong> (${moneda}), en concepto de:`
-  const firmaLabel = esCobro
-    ? `${MIS_DATOS.nombre}${MIS_DATOS.matricula ? '  ·  ' + MIS_DATOS.matricula : ''}`
-    : 'Recibí conforme  ·  firma y aclaración'
+  const intro = esCobro ? 'Recibí la suma de:' : 'Se deja constancia del pago de la suma de:'
+  const firmaLabel = esCobro ? MIS_DATOS.nombre : 'Recibí conforme  —  firma y aclaración'
 
-  const fechaTxt = `${MIS_DATOS.localidad ? MIS_DATOS.localidad + ', ' : ''}${fecha ? fmtF(fecha) : fmtF(new Date().toISOString().slice(0, 10))}`
-  const cuitLine = MIS_DATOS.cuit ? `CUIT ${MIS_DATOS.cuit}` : ''
-  const pieDatos = [cuitLine, MIS_DATOS.contacto].filter(Boolean).join('  ·  ')
+  const dom = MIS_DATOS.domicilios[fuero] || MIS_DATOS.domicilios[MIS_DATOS.defaultFuero]
+  const fechaTxt = fecha ? fmtF(fecha) : fmtF(new Date().toISOString().slice(0, 10))
 
   const w = window.open('', '_blank')
   if (!w) { alert('El navegador bloqueó la ventana del recibo. Permití las ventanas emergentes para este sitio.'); return }
@@ -112,58 +101,76 @@ export function imprimirRecibo({ tipo, nroFmt, fecha, monto, moneda = 'ARS', con
   w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8">
 <title>${nroFmt}</title>
 <style>
-  @page { size: A4; margin: 22mm; }
+  @page { size: A4; margin: 18mm; }
   * { box-sizing: border-box; }
-  body { font-family: Georgia, 'Times New Roman', serif; color: #1a1a1a; margin: 0; }
-  .doc { max-width: 720px; margin: 0 auto; }
-  .head { display: flex; justify-content: space-between; align-items: flex-start;
-          border-bottom: 2px solid #1a1a1a; padding-bottom: 14px; margin-bottom: 30px; }
-  .emisor .n { font-size: 20px; font-weight: bold; letter-spacing: .01em; }
-  .emisor .s { font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: #555; margin-top: 2px; }
-  .emisor .d { font-size: 11px; color: #555; margin-top: 8px; line-height: 1.6; }
-  .rb { text-align: right; white-space: nowrap; }
-  .rb .t   { font-size: 22px; font-weight: bold; letter-spacing: .14em; }
-  .rb .nro { font-family: 'Courier New', monospace; font-size: 14px; margin-top: 6px; }
-  .rb .fch { font-size: 11px; color: #555; margin-top: 6px; }
-  .pill { display: inline-block; border: 2px solid #1a1a1a; border-radius: 6px;
-          padding: 9px 20px; font-size: 21px; font-weight: bold; margin: 4px 0 6px; }
-  .letras { font-size: 12px; font-style: italic; color: #444; margin: 0 0 24px; }
-  .cuerpo { font-size: 15px; line-height: 1.9; }
-  .concepto { margin-top: 8px; font-size: 16px; font-weight: bold;
-              border-bottom: 1px solid #ccc; padding-bottom: 10px; min-height: 24px; }
-  .linea { margin-top: 28px; font-size: 13px; }
-  .linea .lbl { color: #555; }
-  .linea .ln  { display: inline-block; border-bottom: 1px solid #999; min-width: 240px; }
-  .firma { margin-top: 80px; text-align: center; }
-  .firma .fl { border-top: 1px solid #1a1a1a; width: 300px; margin: 0 auto; padding-top: 8px; font-size: 12px; }
-  .pie { margin-top: 44px; text-align: center; font-size: 10px; color: #999; line-height: 1.5; }
+  body { font-family: Arial, Helvetica, sans-serif; color: #000; margin: 0; font-size: 12px; }
+  .doc { max-width: 620px; margin: 0 auto; border: 1.5px solid #000; }
+
+  .top { display: flex; align-items: stretch; border-bottom: 1.5px solid #000; }
+  .col-em { flex: 1; padding: 12px 14px; }
+  .box-tipo { width: 64px; border-left: 1px solid #000; border-right: 1px solid #000;
+              display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .box-tipo .big { font-size: 36px; font-weight: bold; line-height: 1; }
+  .box-tipo .sub { font-size: 8px; letter-spacing: .1em; margin-top: 3px; }
+  .col-r { width: 210px; padding: 12px 14px; }
+
+  .em-nom { font-size: 16px; font-weight: bold; }
+  .em-sub { font-size: 10px; letter-spacing: .16em; text-transform: uppercase; margin-top: 1px; }
+  .em-mat { font-size: 10px; margin-top: 9px; line-height: 1.6; }
+  .em-dom { font-size: 10px; margin-top: 3px; line-height: 1.6; }
+
+  .r-tit  { font-size: 18px; font-weight: bold; letter-spacing: .1em; }
+  .r-meta { font-size: 11px; margin-top: 9px; line-height: 1.8; }
+  .r-meta .k { color: #000; }
+  .r-meta .v { font-weight: bold; }
+
+  .body { padding: 16px 14px; }
+  .intro { font-size: 11px; margin-bottom: 8px; }
+  .imp-box { display: inline-block; border: 1.5px solid #000; padding: 8px 16px; font-size: 22px; font-weight: bold; }
+  .imp-box .mon { font-size: 11px; font-weight: normal; margin-left: 6px; }
+  .letras { font-size: 11px; font-style: italic; margin: 8px 0 18px; }
+  .concepto-k { font-size: 11px; }
+  .concepto-v { font-size: 14px; font-weight: bold; border-bottom: 1px solid #000; padding-bottom: 8px; margin-top: 3px; min-height: 22px; }
+  .pago { margin-top: 18px; font-size: 11px; }
+  .pago .ln { display: inline-block; border-bottom: 1px solid #777; min-width: 260px; }
+  .firma { margin-top: 64px; text-align: center; padding-bottom: 16px; }
+  .firma .fl { border-top: 1px solid #000; width: 290px; margin: 0 auto; padding-top: 7px; font-size: 11px; }
 </style></head><body><div class="doc">
-  <div class="head">
-    <div class="emisor">
-      <div class="n">${MIS_DATOS.nombre}</div>
-      <div class="s">${MIS_DATOS.subtitulo || ''}</div>
-      <div class="d">${MIS_DATOS.matricula || ''}<br>${MIS_DATOS.domicilio || ''}${pieDatos ? '<br>' + pieDatos : ''}</div>
+
+  <div class="top">
+    <div class="col-em">
+      <div class="em-nom">${MIS_DATOS.nombre}</div>
+      <div class="em-sub">${MIS_DATOS.subtitulo || ''}</div>
+      <div class="em-mat">${MIS_DATOS.matriculas || ''}</div>
+      <div class="em-dom">${dom.dir}</div>
     </div>
-    <div class="rb">
-      <div class="t">${titulo}</div>
-      <div class="nro">N° ${nroFmt}</div>
-      <div class="fch">${fechaTxt}</div>
+    <div class="box-tipo">
+      <div class="big">R</div>
+      <div class="sub">RECIBO</div>
+    </div>
+    <div class="col-r">
+      <div class="r-tit">RECIBO</div>
+      <div class="r-meta">
+        <span class="k">N°: </span><span class="v">${nroFmt}</span><br>
+        <span class="k">Fecha: </span><span class="v">${fechaTxt}</span><br>
+        <span class="k">Lugar: </span><span class="v">${dom.lugar}</span>
+      </div>
     </div>
   </div>
 
-  <div class="pill">${montoTxt}</div>
-  <div class="letras">Son ${letrasTxt}.</div>
+  <div class="body">
+    <div class="intro">${intro}</div>
+    <div class="imp-box">${montoTxt}<span class="mon">(${moneda})</span></div>
+    <div class="letras">Son ${letrasTxt}.</div>
 
-  <div class="cuerpo">
-    ${introTxt}
-    <div class="concepto">${concepto || '—'}</div>
+    <div class="concepto-k">En concepto de:</div>
+    <div class="concepto-v">${concepto || '—'}</div>
+
+    <div class="pago">Forma de pago: <span class="ln">&nbsp;</span></div>
+
+    <div class="firma"><div class="fl">${firmaLabel}</div></div>
   </div>
 
-  <div class="linea"><span class="lbl">Forma de pago: </span><span class="ln">&nbsp;</span></div>
-
-  <div class="firma"><div class="fl">${firmaLabel}</div></div>
-
-  <div class="pie">Documento interno del estudio. No reemplaza la factura exigida por la normativa fiscal vigente.</div>
 </div></body></html>`)
   w.document.close()
   setTimeout(() => { w.focus(); w.print() }, 350)
