@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { saveGasto, deleteGasto, updateTramite, deleteTramite, addTramite, resetTramites } from '../lib/store.js'
 import { uid, dateFmt, fmtF, TRAMITES_DEFAULT } from '../lib/supabase.js'
-import { imprimirRecibo, nextReciboNro, fmtNro, fueroDeCausa } from '../lib/recibo.js'
+import { imprimirRecibo, nextReciboNro, fmtNro } from '../lib/recibo.js'
 import Modal from '../components/Modal.jsx'
 
 export default function Gastos({ store }) {
@@ -54,7 +54,7 @@ export default function Gastos({ store }) {
       monto: g.total,
       moneda: 'ARS',
       concepto: g.tramite_nombre,
-      fuero: fueroDeCausa(causaObj),
+      tribunal: causaObj?.tribunal || null,
     })
   }
 
