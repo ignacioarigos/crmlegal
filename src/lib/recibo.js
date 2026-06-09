@@ -7,11 +7,12 @@ import { fmtF } from './supabase.js'
 export const MIS_DATOS = {
   nombre:    'Ignacio Arigós',
   subtitulo: 'Abogado',
-  matriculas: 'T° 120  F° 824  —  C.P.A.C.F.   ·   T° LVII  F° 344  —  C.A.S.I.',
+  matriculas: 'T° 120  F° 824  —  C.P.A.C.F.   
+    T° LVII  F° 344  —  C.A.S.I.',
 
   // Domicilio y lugar de emisión según el TRIBUNAL de la causa (campo causa.tribunal)
   domicilios: {
-    PJN:  { dir: 'Paraná N° 597, Piso 2, Of. «15», C.A.B.A.',        lugar: 'C.A.B.A.' },
+    PJN:  { dir: 'Paraná N° 597, Piso 2, Of. &quot15&quot;, C.A.B.A.',        lugar: 'C.A.B.A.' },
     SCBA: { dir: 'Adolfo Alsina N° 1.756, Florida, Vicente López.',   lugar: 'Vicente López' },
     EJE:  { dir: 'Paraná N° 597, Piso 2, Of. «15», C.A.B.A.',        lugar: 'C.A.B.A.' }, // CABA (ajustar si constituís otro)
   },
