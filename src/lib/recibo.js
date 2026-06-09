@@ -7,11 +7,11 @@ import { fmtF } from './supabase.js'
 export const MIS_DATOS = {
   nombre:    'Ignacio Arigós',
   subtitulo: 'Abogado',
-  // Separamos las matrículas usando un salto de línea HTML <br>
+  // Separación de matrículas en dos renglones mediante HTML
   matriculas: 'T° 120  F° 824  —  C.P.A.C.F.<br>T° LVII  F° 344  —  C.A.S.I.',
 
   // Domicilio y lugar de emisión según el TRIBUNAL de la causa (campo causa.tribunal)
-  // Corregimos la entidad "&quot;" para usar comillas dobles comunes o tipográficas directamente
+  // Uso de comillas dobles estándar directas para evitar fallos de codificación
   domicilios: {
     PJN:  { dir: 'Paraná N° 597, Piso 2, Of. "15", C.A.B.A.',        lugar: 'C.A.B.A.' },
     SCBA: { dir: 'Adolfo Alsina N° 1.756, Florida, Vicente López.',   lugar: 'Vicente López' },
@@ -75,12 +75,20 @@ export function montoEnLetras(monto, moneda = 'ARS') {
 }
 // ────────────────────────────────────────────────────────────────
 
-export function imprimirRecibo({ tipo, nroFmt, fecha, monto, moneda = 'ARS', concepto, tribunal }) {
+// Abre el recibo en una ventana nueva, listo para imprimir / guardar como PDF.
+// Argumentos aceptados incluyendo 'pagador' para vincular con el cobro cargado.
+export function imprimirRecibo({ tipo, nroFmt, fecha, monto, moneda = 'ARS', concepto, tribunal, pagador }) {
   const esCobro  = tipo === 'cobro'
   const simbolo  = moneda === 'USD' ? 'U$S' : '$'
   const montoTxt = `${simbolo} ${(monto || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   const letrasTxt = montoEnLetras(monto, moneda)
-  const intro = esCobro ? 'Recibí la suma de:' : 'Se deja constancia del pago de la suma de:'
+  
+  // Integración dinámica de la persona que realiza/recibe el pago
+  const deQuien = pagador ? ` de <strong>${pagador}</strong>` : ''
+  const intro = esCobro 
+    ? `Recibí${deQuien} la suma de:` 
+    : `Se deja constancia del pago${deQuien.replace(' de ', ' a ')} de la suma de:`
+
   const firmaLabel = esCobro ? MIS_DATOS.nombre : 'Recibí conforme  —  firma y aclaración'
 
   const dom = MIS_DATOS.domicilios[tribunal] || MIS_DATOS.domicilios[MIS_DATOS.defaultTribunal]
@@ -110,10 +118,10 @@ export function imprimirRecibo({ tipo, nroFmt, fecha, monto, moneda = 'ARS', con
     background: #fff;
   }
 
-  /* Encabezado: Añadimos flexbox vertical para centrar el bloque izquierdo */
+  /* Encabezado */
   .top { display: flex; align-items: stretch; border-bottom: 1px solid #333; background: #fafafa; }
   
-  /* Ajuste de alineación centralizada para tus datos */
+  /* Alineación centralizada y equilibrada de tus datos */
   .col-em { 
     flex: 1.2; 
     padding: 18px 20px; 
@@ -151,7 +159,8 @@ export function imprimirRecibo({ tipo, nroFmt, fecha, monto, moneda = 'ARS', con
 
   /* Cuerpo del documento */
   .body { padding: 32px 28px; font-family: Georgia, serif; }
-  .intro { font-size: 13px; color: #444; font-style: italic; margin-bottom: 12px; }
+  .intro { font-size: 13.5px; color: #333; font-style: italic; margin-bottom: 14px; line-height: 1.4; }
+  .intro strong { font-family: system-ui, sans-serif; font-style: normal; font-weight: 700; color: #000; }
   
   .imp-box { 
     display: inline-block; 
@@ -167,7 +176,7 @@ export function imprimirRecibo({ tipo, nroFmt, fecha, monto, moneda = 'ARS', con
   
   .letras { font-size: 13px; font-style: italic; margin: 12px 0 28px; color: #222; }
   
-  /* Concepto: Ajustado para centrar etiquetas y contenidos */
+  /* Concepto centralizado */
   .concepto-container { text-align: center; margin-top: 15px; }
   .concepto-k { font-size: 12px; color: #555; font-family: system-ui, sans-serif; text-transform: uppercase; letter-spacing: 0.05em; }
   .concepto-v { 
@@ -182,6 +191,7 @@ export function imprimirRecibo({ tipo, nroFmt, fecha, monto, moneda = 'ARS', con
     max-width: 85%;
   }
   
+  /* Firma */
   .firma { margin-top: 90px; text-align: center; }
   .firma .fl { 
     border-top: 1px solid #444; 
