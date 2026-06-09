@@ -92,39 +92,101 @@ export function imprimirRecibo({ tipo, nroFmt, fecha, monto, moneda = 'ARS', con
   w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8">
 <title>${nroFmt}</title>
 <style>
-  @page { size: A4; margin: 18mm; }
+  @page { size: A4; margin: 20mm; }
   * { box-sizing: border-box; }
-  body { font-family: Arial, Helvetica, sans-serif; color: #000; margin: 0; font-size: 12px; }
-  .doc { max-width: 620px; margin: 0 auto; border: 1.5px solid #000; }
+  body { 
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+    color: #222; 
+    margin: 0; 
+    font-size: 13px; 
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  
+  /* Contenedor Principal: Bordes más estilizados y sutiles */
+  .doc { 
+    max-width: 680px; 
+    margin: 0 auto; 
+    border: 1px solid #333; 
+    background: #fff;
+  }
 
-  .top { display: flex; align-items: stretch; border-bottom: 1.5px solid #000; }
-  .col-em { flex: 1; padding: 12px 14px; }
-  .box-tipo { width: 64px; border-left: 1px solid #000; border-right: 1px solid #000;
-              display: flex; flex-direction: column; align-items: center; justify-content: center; }
-  .box-tipo .big { font-size: 36px; font-weight: bold; line-height: 1; }
-  .box-tipo .sub { font-size: 8px; letter-spacing: .1em; margin-top: 3px; }
-  .col-r { width: 210px; padding: 12px 14px; }
+  /* Encabezado */
+  .top { display: flex; align-items: stretch; border-bottom: 1px solid #333; background: #fafafa; }
+  .col-em { flex: 1.2; padding: 18px 20px; }
+  
+  /* El recuadro de la 'R' ahora es un divisor elegante */
+  .box-tipo { 
+    width: 55px; 
+    border-left: 1px solid #333; 
+    border-right: 1px solid #333;
+    display: flex; 
+    flex-direction: column; 
+    align-items: center; 
+    justify-content: center; 
+    background: #fff;
+  }
+  .box-tipo .big { font-size: 28px; font-weight: 800; color: #000; line-height: 1; }
+  .box-tipo .sub { font-size: 7px; letter-spacing: .12em; margin-top: 4px; color: #555; font-weight: bold; }
+  
+  .col-r { flex: 0.8; padding: 18px 20px; background: #fff; }
 
-  .em-nom { font-size: 16px; font-weight: bold; }
-  .em-sub { font-size: 10px; letter-spacing: .16em; text-transform: uppercase; margin-top: 1px; }
-  .em-mat { font-size: 10px; margin-top: 9px; line-height: 1.6; }
-  .em-dom { font-size: 10px; margin-top: 3px; line-height: 1.6; }
+  /* Datos del Emisor */
+  .em-nom { font-size: 18px; font-weight: 700; color: #111; letter-spacing: -0.02em; }
+  .em-sub { font-size: 10px; letter-spacing: .18em; text-transform: uppercase; margin-top: 3px; color: #666; font-weight: 600; }
+  .em-mat { font-size: 10px; margin-top: 12px; line-height: 1.5; color: #444; }
+  .em-dom { font-size: 10.5px; margin-top: 4px; color: #444; }
 
-  .r-tit  { font-size: 18px; font-weight: bold; letter-spacing: .1em; }
-  .r-meta { font-size: 11px; margin-top: 9px; line-height: 1.8; }
-  .r-meta .v { font-weight: bold; }
+  /* Datos del Recibo */
+  .r-tit  { font-size: 16px; font-weight: 700; letter-spacing: .15em; color: #111; text-transform: uppercase; }
+  .r-meta { font-size: 11.5px; margin-top: 10px; line-height: 1.8; color: #333; }
+  .r-meta .v { font-weight: 600; color: #000; }
 
-  .body { padding: 16px 14px; }
-  .intro { font-size: 11px; margin-bottom: 8px; }
-  .imp-box { display: inline-block; border: 1.5px solid #000; padding: 8px 16px; font-size: 22px; font-weight: bold; }
-  .imp-box .mon { font-size: 11px; font-weight: normal; margin-left: 6px; }
-  .letras { font-size: 11px; font-style: italic; margin: 8px 0 18px; }
-  .concepto-k { font-size: 11px; }
-  .concepto-v { font-size: 14px; font-weight: bold; border-bottom: 1px solid #000; padding-bottom: 8px; margin-top: 3px; min-height: 22px; }
-  .pago { margin-top: 18px; font-size: 11px; }
-  .pago .ln { display: inline-block; border-bottom: 1px solid #777; min-width: 260px; }
-  .firma { margin-top: 64px; text-align: center; padding-bottom: 16px; }
-  .firma .fl { border-top: 1px solid #000; width: 290px; margin: 0 auto; padding-top: 7px; font-size: 11px; }
+  /* Cuerpo del documento con tipografía serif para mayor elegancia legal */
+  .body { padding: 32px 28px; font-family: Georgia, serif; }
+  .intro { font-size: 13px; color: #444; font-style: italic; margin-bottom: 12px; }
+  
+  /* Caja de monto destacado */
+  .imp-box { 
+    display: inline-block; 
+    background: #f3f4f6; 
+    border: 1px solid #333; 
+    padding: 10px 22px; 
+    font-size: 24px; 
+    font-weight: bold; 
+    font-family: system-ui, sans-serif;
+    letter-spacing: -0.01em;
+  }
+  .imp-box .mon { font-size: 12px; font-weight: 500; margin-left: 8px; color: #555; }
+  
+  .letras { font-size: 13px; font-style: italic; margin: 12px 0 28px; color: #222; }
+  
+  /* Concepto */
+  .concepto-k { font-size: 12px; color: #555; font-family: system-ui, sans-serif; text-transform: uppercase; letter-spacing: 0.05em; }
+  .concepto-v { 
+    font-size: 15px; 
+    font-weight: bold; 
+    font-family: system-ui, sans-serif;
+    border-bottom: 1px dotted #999; 
+    padding-bottom: 6px; 
+    margin-top: 6px; 
+    min-height: 28px; 
+    color: #111;
+  }
+  
+  /* Firma al pie bien balanceada */
+  .firma { margin-top: 90px; text-align: center; }
+  .firma .fl { 
+    border-top: 1px solid #444; 
+    width: 260px; 
+    margin: 0 auto; 
+    padding-top: 8px; 
+    font-size: 11px; 
+    font-family: system-ui, sans-serif;
+    color: #333;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
 </style></head><body><div class="doc">
 
   <div class="top">
