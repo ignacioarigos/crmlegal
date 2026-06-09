@@ -156,8 +156,7 @@ export function imprimirRecibo({ tipo, nroFmt, fecha, monto, moneda = 'ARS', con
     <div class="concepto-k">En concepto de:</div>
     <div class="concepto-v">${concepto || '—'}</div>
 
-    <div class="pago">Forma de pago: <span class="ln">&nbsp;</span></div>
-
+    
     <div class="firma"><div class="fl">${firmaLabel}</div></div>
   </div>
 
