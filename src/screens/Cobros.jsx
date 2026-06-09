@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { saveCobro, deleteCobro } from '../lib/store.js'
 import { uid, dateFmt, fmtF } from '../lib/supabase.js'
-import { imprimirRecibo, nextReciboNro, fmtNro, fueroDeCausa } from '../lib/recibo.js'
+import { imprimirRecibo, nextReciboNro, fmtNro } from '../lib/recibo.js'
 import Modal from '../components/Modal.jsx'
 
 export default function Cobros({ store }) {
@@ -66,7 +66,7 @@ export default function Cobros({ store }) {
       monto: c.monto,
       moneda: c.moneda || 'ARS',
       concepto: c.concepto,
-      fuero: fueroDeCausa(causaObj),
+      tribunal: causaObj?.tribunal || null,
     })
   }
 
