@@ -7,15 +7,13 @@ import { fmtF } from './supabase.js'
 export const MIS_DATOS = {
   nombre:    'Ignacio Arigós',
   subtitulo: 'Abogado',
-  // Separación de matrículas en dos renglones mediante HTML
-  matriculas: 'T° 120  F° 824  —  C.P.A.C.F.<br>T° LVII  F° 344  —  C.A.S.I.',
+  matriculas: 'T° 120  F° 824  —  C.P.A.C.F.   ·   T° LVII  F° 344  —  C.A.S.I.',
 
   // Domicilio y lugar de emisión según el TRIBUNAL de la causa (campo causa.tribunal)
-  // Uso de comillas dobles estándar directas para evitar fallos de codificación
   domicilios: {
-    PJN:  { dir: 'Paraná N° 597, Piso 2, Of. "15", C.A.B.A.',        lugar: 'C.A.B.A.' },
+    PJN:  { dir: 'Paraná N° 597, Piso 2, Of. «15», C.A.B.A.',        lugar: 'C.A.B.A.' },
     SCBA: { dir: 'Adolfo Alsina N° 1.756, Florida, Vicente López.',   lugar: 'Vicente López' },
-    EJE:  { dir: 'Paraná N° 597, Piso 2, Of. "15", C.A.B.A.',        lugar: 'C.A.B.A.' }, 
+    EJE:  { dir: 'Paraná N° 597, Piso 2, Of. «15», C.A.B.A.',        lugar: 'C.A.B.A.' }, // CABA (ajustar si constituís otro)
   },
   defaultTribunal: 'PJN',   // cuando el cobro/pago no tiene causa asociada
 }
@@ -76,19 +74,15 @@ export function montoEnLetras(monto, moneda = 'ARS') {
 // ────────────────────────────────────────────────────────────────
 
 // Abre el recibo en una ventana nueva, listo para imprimir / guardar como PDF.
-// Argumentos aceptados incluyendo 'pagador' para vincular con el cobro cargado.
-export function imprimirRecibo({ tipo, nroFmt, fecha, monto, moneda = 'ARS', concepto, tribunal, pagador }) {
+// { tipo: 'cobro'|'pago', nroFmt, fecha, monto, moneda, concepto, tribunal }
+export function imprimirRecibo({ tipo, nroFmt, fecha, monto, moneda = 'ARS', concepto, tribunal }) {
   const esCobro  = tipo === 'cobro'
   const simbolo  = moneda === 'USD' ? 'U$S' : '$'
   const montoTxt = `${simbolo} ${(monto || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   const letrasTxt = montoEnLetras(monto, moneda)
-  
-  // Integración dinámica de la persona que realiza/recibe el pago
-  const deQuien = pagador ? ` de <strong>${pagador}</strong>` : ''
-  const intro = esCobro 
-    ? `Recibí${deQuien} la suma de:` 
-    : `Se deja constancia del pago${deQuien.replace(' de ', ' a ')} de la suma de:`
-
+  const banda = esCobro
+    ? 'Recibí la suma que se detalla a continuación:'
+    : 'Se deja constancia del pago según el siguiente detalle:'
   const firmaLabel = esCobro ? MIS_DATOS.nombre : 'Recibí conforme  —  firma y aclaración'
 
   const dom = MIS_DATOS.domicilios[tribunal] || MIS_DATOS.domicilios[MIS_DATOS.defaultTribunal]
@@ -100,111 +94,68 @@ export function imprimirRecibo({ tipo, nroFmt, fecha, monto, moneda = 'ARS', con
   w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8">
 <title>${nroFmt}</title>
 <style>
-  @page { size: A4; margin: 20mm; }
+  @page { size: A4; margin: 16mm; }
   * { box-sizing: border-box; }
-  body { 
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
-    color: #222; 
-    margin: 0; 
-    font-size: 13px; 
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
-  
-  .doc { 
-    max-width: 680px; 
-    margin: 0 auto; 
-    border: 1px solid #333; 
-    background: #fff;
-  }
+  body { font-family: Arial, Helvetica, sans-serif; color: #000; margin: 0; font-size: 12px; }
+  .doc { max-width: 640px; margin: 0 auto; border: 1.5px solid #000; display: flex; flex-direction: column; min-height: 900px; }
 
-  /* Encabezado */
-  .top { display: flex; align-items: stretch; border-bottom: 1px solid #333; background: #fafafa; }
-  
-  /* Alineación centralizada y equilibrada de tus datos */
-  .col-em { 
-    flex: 1.2; 
-    padding: 18px 20px; 
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    text-align: center; 
-  }
-  
-  .box-tipo { 
-    width: 55px; 
-    border-left: 1px solid #333; 
-    border-right: 1px solid #333;
-    display: flex; 
-    flex-direction: column; 
-    align-items: center; 
-    justify-content: center; 
-    background: #fff;
-  }
-  .box-tipo .big { font-size: 28px; font-weight: 800; color: #000; line-height: 1; }
-  .box-tipo .sub { font-size: 7px; letter-spacing: .12em; margin-top: 4px; color: #555; font-weight: bold; }
-  
-  .col-r { flex: 0.8; padding: 18px 20px; background: #fff; }
+  /* Banda superior tipo ORIGINAL */
+  .banner { text-align: center; font-size: 13px; font-weight: bold; letter-spacing: .35em;
+            padding: 5px 0; border-bottom: 1.5px solid #000; }
 
-  /* Datos del Emisor */
-  .em-nom { font-size: 18px; font-weight: 700; color: #111; letter-spacing: -0.02em; }
-  .em-sub { font-size: 10px; letter-spacing: .18em; text-transform: uppercase; margin-top: 3px; color: #666; font-weight: 600; }
-  .em-mat { font-size: 10px; margin-top: 10px; line-height: 1.5; color: #444; }
-  .em-dom { font-size: 10.5px; margin-top: 6px; color: #444; }
+  /* Cabecera: emisor | R | datos */
+  .top { display: flex; align-items: stretch; border-bottom: 1.5px solid #000; }
+  .col-em { flex: 1; padding: 14px 16px; }
+  .box-tipo { width: 66px; border-left: 1px solid #000; border-right: 1px solid #000;
+              display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .box-tipo .big { font-size: 38px; font-weight: bold; line-height: 1; }
+  .box-tipo .sub { font-size: 8px; letter-spacing: .12em; margin-top: 3px; }
+  .col-r { width: 224px; padding: 14px 16px; }
 
-  /* Datos del Recibo */
-  .r-tit  { font-size: 16px; font-weight: 700; letter-spacing: .15em; color: #111; text-transform: uppercase; }
-  .r-meta { font-size: 11.5px; margin-top: 10px; line-height: 1.8; color: #333; }
-  .r-meta .v { font-weight: 600; color: #000; }
+  .em-nom { font-size: 17px; font-weight: bold; }
+  .em-sub { font-size: 10px; letter-spacing: .18em; text-transform: uppercase; margin-top: 1px; color: #222; }
+  .em-mat { font-size: 10px; margin-top: 10px; line-height: 1.7; }
+  .em-dom { font-size: 10px; margin-top: 4px; line-height: 1.6; }
 
-  /* Cuerpo del documento */
-  .body { padding: 32px 28px; font-family: Georgia, serif; }
-  .intro { font-size: 13.5px; color: #333; font-style: italic; margin-bottom: 14px; line-height: 1.4; }
-  .intro strong { font-family: system-ui, sans-serif; font-style: normal; font-weight: 700; color: #000; }
-  
-  .imp-box { 
-    display: inline-block; 
-    background: #f3f4f6; 
-    border: 1px solid #333; 
-    padding: 10px 22px; 
-    font-size: 24px; 
-    font-weight: bold; 
-    font-family: system-ui, sans-serif;
-    letter-spacing: -0.01em;
-  }
-  .imp-box .mon { font-size: 12px; font-weight: 500; margin-left: 8px; color: #555; }
-  
-  .letras { font-size: 13px; font-style: italic; margin: 12px 0 28px; color: #222; }
-  
-  /* Concepto centralizado */
-  .concepto-container { text-align: center; margin-top: 15px; }
-  .concepto-k { font-size: 12px; color: #555; font-family: system-ui, sans-serif; text-transform: uppercase; letter-spacing: 0.05em; }
-  .concepto-v { 
-    font-size: 15px; 
-    font-weight: bold; 
-    font-family: system-ui, sans-serif;
-    border-bottom: 1px dotted #999; 
-    padding-bottom: 6px; 
-    margin: 6px auto 0 auto; 
-    min-height: 28px; 
-    color: #111;
-    max-width: 85%;
-  }
-  
-  /* Firma */
-  .firma { margin-top: 90px; text-align: center; }
-  .firma .fl { 
-    border-top: 1px solid #444; 
-    width: 260px; 
-    margin: 0 auto; 
-    padding-top: 8px; 
-    font-size: 11px; 
-    font-family: system-ui, sans-serif;
-    color: #333;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-  }
+  .r-tit  { font-size: 20px; font-weight: bold; letter-spacing: .1em; }
+  .r-meta { font-size: 11px; margin-top: 10px; line-height: 1.9; }
+  .r-meta .v { font-weight: bold; }
+
+  /* Banda de leyenda */
+  .band { border-bottom: 1.5px solid #000; background: #f4f4f4; padding: 8px 16px; font-size: 11px; }
+
+  /* Cuerpo (crece para dar altura) */
+  .body { flex: 1; display: flex; flex-direction: column; padding: 16px; }
+
+  /* Tabla de detalle */
+  table.det { width: 100%; border-collapse: collapse; }
+  table.det th { background: #ececec; border: 1px solid #000; padding: 6px 10px;
+                 font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
+  table.det th.l, table.det td.l { text-align: left; }
+  table.det th.c, table.det td.c { text-align: center; width: 90px; }
+  table.det th.r, table.det td.r { text-align: right; width: 150px; }
+  table.det td { border-left: 1px solid #000; border-right: 1px solid #000; padding: 10px;
+                 font-size: 13px; vertical-align: top; }
+  table.det td.l { font-weight: bold; }
+  .det-fill { flex: 1; border-left: 1px solid #000; border-right: 1px solid #000; border-bottom: 1px solid #000; min-height: 150px; }
+
+  .letras { font-size: 11px; font-style: italic; margin: 12px 2px 0; }
+
+  /* Totales */
+  .tot-wrap { display: flex; justify-content: flex-end; margin-top: 14px; }
+  .tot { width: 260px; border: 1.5px solid #000; }
+  .tot .row { display: flex; justify-content: space-between; padding: 6px 12px; font-size: 12px; }
+  .tot .row.total { border-top: 1px solid #000; font-size: 15px; font-weight: bold; }
+
+  /* Pie */
+  .foot { padding: 0 16px 18px; }
+  .pago { margin-top: 20px; font-size: 11px; }
+  .pago .ln { display: inline-block; border-bottom: 1px solid #777; min-width: 280px; }
+  .firma { margin-top: 66px; text-align: center; }
+  .firma .fl { border-top: 1px solid #000; width: 300px; margin: 0 auto; padding-top: 7px; font-size: 11px; }
 </style></head><body><div class="doc">
+
+  <div class="banner">ORIGINAL</div>
 
   <div class="top">
     <div class="col-em">
@@ -227,16 +178,27 @@ export function imprimirRecibo({ tipo, nroFmt, fecha, monto, moneda = 'ARS', con
     </div>
   </div>
 
+  <div class="band">${banda}</div>
+
   <div class="body">
-    <div class="intro">${intro}</div>
-    <div class="imp-box">${montoTxt}<span class="mon">(${moneda})</span></div>
+    <table class="det">
+      <thead><tr><th class="l">Detalle</th><th class="c">Cantidad</th><th class="r">Importe</th></tr></thead>
+      <tbody><tr><td class="l">${concepto || '—'}</td><td class="c">1</td><td class="r">${montoTxt}</td></tr></tbody>
+    </table>
+    <div class="det-fill"></div>
+
     <div class="letras">Son ${letrasTxt}.</div>
 
-    <div class="concepto-container">
-      <div class="concepto-k">En concepto de:</div>
-      <div class="concepto-v">${concepto || '—'}</div>
+    <div class="tot-wrap">
+      <div class="tot">
+        <div class="row"><span>Subtotal (${moneda}):</span><span>${montoTxt}</span></div>
+        <div class="row total"><span>TOTAL:</span><span>${montoTxt}</span></div>
+      </div>
     </div>
+  </div>
 
+  <div class="foot">
+    <div class="pago">Forma de pago: <span class="ln">&nbsp;</span></div>
     <div class="firma"><div class="fl">${firmaLabel}</div></div>
   </div>
 
