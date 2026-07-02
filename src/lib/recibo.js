@@ -11,9 +11,9 @@ export const MIS_DATOS = {
 
   // Domicilio y lugar de emisión según el TRIBUNAL de la causa (campo causa.tribunal)
   domicilios: {
-    PJN:  { dir: 'Paraná N° 597, Piso 2, Of. «15», C.A.B.A.',        lugar: 'C.A.B.A.' },
+    PJN:  { dir: 'Paraná N° 597, Piso 2, Of. "15", C.A.B.A.',        lugar: 'C.A.B.A.' },
     SCBA: { dir: 'Adolfo Alsina N° 1.756, Florida, Vicente López.',   lugar: 'Vicente López' },
-    EJE:  { dir: 'Paraná N° 597, Piso 2, Of. «15», C.A.B.A.',        lugar: 'C.A.B.A.' }, // CABA (ajustar si constituís otro)
+    EJE:  { dir: 'Paraná N° 597, Piso 2, Of. "15", C.A.B.A.',        lugar: 'C.A.B.A.' }, // CABA (ajustar si constituís otro)
   },
   defaultTribunal: 'PJN',   // cuando el cobro/pago no tiene causa asociada
 }
@@ -137,7 +137,7 @@ export function imprimirRecibo({ tipo, nroFmt, fecha, monto, moneda = 'ARS', con
   table.det td { border-left: 1px solid #000; border-right: 1px solid #000; padding: 10px;
                  font-size: 13px; vertical-align: top; }
   table.det td.l { font-weight: bold; }
-  .det-fill { flex: 1; border-left: 1px solid #000; border-right: 1px solid #000; border-bottom: 1px solid #000; min-height: 150px; }
+  table.det tr.fill td { height: 200px; border-bottom: 1px solid #000; }
 
   .letras { font-size: 11px; font-style: italic; margin: 12px 2px 0; }
 
@@ -183,9 +183,11 @@ export function imprimirRecibo({ tipo, nroFmt, fecha, monto, moneda = 'ARS', con
   <div class="body">
     <table class="det">
       <thead><tr><th class="l">Detalle</th><th class="c">Cantidad</th><th class="r">Importe</th></tr></thead>
-      <tbody><tr><td class="l">${concepto || '—'}</td><td class="c">1</td><td class="r">${montoTxt}</td></tr></tbody>
+      <tbody>
+        <tr><td class="l">${concepto || '—'}</td><td class="c">1</td><td class="r">${montoTxt}</td></tr>
+        <tr class="fill"><td class="l"></td><td class="c"></td><td class="r"></td></tr>
+      </tbody>
     </table>
-    <div class="det-fill"></div>
 
     <div class="letras">Son ${letrasTxt}.</div>
 
@@ -198,7 +200,6 @@ export function imprimirRecibo({ tipo, nroFmt, fecha, monto, moneda = 'ARS', con
   </div>
 
   <div class="foot">
-    <div class="pago">Forma de pago: <span class="ln">&nbsp;</span></div>
     <div class="firma"><div class="fl">${firmaLabel}</div></div>
   </div>
 
