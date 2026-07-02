@@ -7,7 +7,10 @@ import { fmtF } from './supabase.js'
 export const MIS_DATOS = {
   nombre:    'Ignacio Arigós',
   subtitulo: 'Abogado',
-  matriculas: 'T° 120  F° 824  —  C.P.A.C.F.   ·   T° LVII  F° 344  —  C.A.S.I.',
+  matriculas: [
+    'T° 120  F° 824  —  C.P.A.C.F.',
+    'T° LVII  F° 344  —  C.A.S.I.',
+  ],
 
   // Domicilio y lugar de emisión según el TRIBUNAL de la causa (campo causa.tribunal)
   domicilios: {
@@ -73,7 +76,7 @@ export function montoEnLetras(monto, moneda = 'ARS') {
 }
 // ────────────────────────────────────────────────────────────────
 
-// Abre el recibo en una ventana nueva, listo para imprimir / guardar como PDF.
+// Abre el recibo en una ventana nueva, listo para imprimir / guardar como PDF (A5).
 // { tipo: 'cobro'|'pago', nroFmt, fecha, monto, moneda, concepto, tribunal }
 export function imprimirRecibo({ tipo, nroFmt, fecha, monto, moneda = 'ARS', concepto, tribunal }) {
   const esCobro  = tipo === 'cobro'
@@ -87,6 +90,8 @@ export function imprimirRecibo({ tipo, nroFmt, fecha, monto, moneda = 'ARS', con
 
   const dom = MIS_DATOS.domicilios[tribunal] || MIS_DATOS.domicilios[MIS_DATOS.defaultTribunal]
   const fechaTxt = fecha ? fmtF(fecha) : fmtF(new Date().toISOString().slice(0, 10))
+  const nombreHead = `IA&nbsp;&nbsp;|&nbsp;&nbsp;${MIS_DATOS.nombre.toUpperCase()}`
+  const matHtml = (MIS_DATOS.matriculas || []).map(m => `<div>${m}</div>`).join('')
 
   const w = window.open('', '_blank')
   if (!w) { alert('El navegador bloqueó la ventana del recibo. Permití las ventanas emergentes para este sitio.'); return }
@@ -94,80 +99,75 @@ export function imprimirRecibo({ tipo, nroFmt, fecha, monto, moneda = 'ARS', con
   w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8">
 <title>${nroFmt}</title>
 <style>
-  @page { size: A4; margin: 16mm; }
+  @page { size: A5; margin: 12mm; }
   * { box-sizing: border-box; }
-  body { font-family: Arial, Helvetica, sans-serif; color: #000; margin: 0; font-size: 12px; }
-  .doc { max-width: 640px; margin: 0 auto; border: 1.5px solid #000; display: flex; flex-direction: column; min-height: 900px; }
+  html, body { height: 100%; }
+  body { font-family: Arial, Helvetica, sans-serif; color: #000; margin: 0; font-size: 11px; }
+  .doc { max-width: 470px; margin: 0 auto; border: 1.5px solid #000; display: flex; flex-direction: column; min-height: 690px; }
 
-  /* Banda superior tipo ORIGINAL */
-  .banner { text-align: center; font-size: 13px; font-weight: bold; letter-spacing: .35em;
-            padding: 5px 0; border-bottom: 1.5px solid #000; }
+  .banner { text-align: center; font-size: 12px; font-weight: bold; letter-spacing: .35em;
+            padding: 4px 0; border-bottom: 1.5px solid #000; }
 
-  /* Cabecera: emisor | R | datos */
   .top { display: flex; align-items: stretch; border-bottom: 1.5px solid #000; }
-  .col-em { flex: 1; padding: 14px 16px; }
-  .box-tipo { width: 66px; border-left: 1px solid #000; border-right: 1px solid #000;
-              display: flex; flex-direction: column; align-items: center; justify-content: center; }
-  .box-tipo .big { font-size: 38px; font-weight: bold; line-height: 1; }
-  .box-tipo .sub { font-size: 8px; letter-spacing: .12em; margin-top: 3px; }
-  .col-r { width: 224px; padding: 14px 16px; }
+  .col-em { flex: 1; padding: 10px 12px; text-align: center; }
+  .box-tipo { width: 54px; border-left: 1px solid #000; border-right: 1px solid #000;
+              display: flex; align-items: center; justify-content: center; }
+  .box-tipo .big { font-size: 34px; font-weight: bold; line-height: 1; }
+  .col-r { width: 158px; padding: 10px 12px; }
 
-  .em-nom { font-size: 17px; font-weight: bold; }
-  .em-sub { font-size: 10px; letter-spacing: .18em; text-transform: uppercase; margin-top: 1px; color: #222; }
-  .em-mat { font-size: 10px; margin-top: 10px; line-height: 1.7; }
-  .em-dom { font-size: 10px; margin-top: 4px; line-height: 1.6; }
+  .em-nom { font-size: 14px; font-weight: bold; letter-spacing: .02em; }
+  .em-sub { font-size: 9px; letter-spacing: .22em; text-transform: uppercase; margin-top: 2px; color: #222; }
+  .em-mat { display: inline-block; border: 1px solid #000; border-radius: 2px; padding: 4px 12px;
+            margin-top: 8px; font-size: 9px; line-height: 1.7; letter-spacing: .02em; }
+  .em-dom { font-size: 9px; margin-top: 7px; line-height: 1.5; }
 
-  .r-tit  { font-size: 20px; font-weight: bold; letter-spacing: .1em; }
-  .r-meta { font-size: 11px; margin-top: 10px; line-height: 1.9; }
+  .r-tit  { font-size: 17px; font-weight: bold; letter-spacing: .1em; }
+  .r-meta { font-size: 10px; margin-top: 8px; line-height: 1.9; }
   .r-meta .v { font-weight: bold; }
 
-  /* Banda de leyenda */
-  .band { border-bottom: 1.5px solid #000; background: #f4f4f4; padding: 8px 16px; font-size: 11px; }
+  .band { border-bottom: 1.5px solid #000; background: #f4f4f4; padding: 6px 12px; font-size: 10px; }
 
-  /* Cuerpo (crece para dar altura) */
-  .body { flex: 1; display: flex; flex-direction: column; padding: 16px; }
+  .body { flex: 1; display: flex; flex-direction: column; padding: 12px; }
 
-  /* Tabla de detalle */
   table.det { width: 100%; border-collapse: collapse; }
-  table.det th { background: #ececec; border: 1px solid #000; padding: 6px 10px;
-                 font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
+  table.det th { background: #ececec; border: 1px solid #000; padding: 5px 8px;
+                 font-size: 9px; text-transform: uppercase; letter-spacing: .04em; }
   table.det th.l, table.det td.l { text-align: left; }
-  table.det th.c, table.det td.c { text-align: center; width: 90px; }
-  table.det th.r, table.det td.r { text-align: right; width: 150px; }
-  table.det td { border-left: 1px solid #000; border-right: 1px solid #000; padding: 10px;
-                 font-size: 13px; vertical-align: top; }
+  table.det th.c, table.det td.c { text-align: center; width: 70px; }
+  table.det th.r, table.det td.r { text-align: right; width: 120px; }
+  table.det td { border-left: 1px solid #000; border-right: 1px solid #000; padding: 8px;
+                 font-size: 12px; vertical-align: top; }
   table.det td.l { font-weight: bold; }
-  table.det tr.fill td { height: 200px; border-bottom: 1px solid #000; }
+  /* fila de relleno: crece para alargar la caja y dejar la firma justo debajo */
+  table.det tr.fill td { border-bottom: 1px solid #000; }
+  table.det { flex: 0 0 auto; }
+  .det-grow { flex: 1; display: flex; }
+  .det-grow table { width: 100%; height: 100%; border-collapse: collapse; }
+  .det-grow td { border-left: 1px solid #000; border-right: 1px solid #000; border-bottom: 1px solid #000; }
+  .det-grow td.c { width: 70px; }
+  .det-grow td.r { width: 120px; }
 
-  .letras { font-size: 11px; font-style: italic; margin: 12px 2px 0; }
+  .letras { font-size: 10px; font-style: italic; margin: 10px 2px 0; }
 
-  /* Totales */
-  .tot-wrap { display: flex; justify-content: flex-end; margin-top: 14px; }
-  .tot { width: 260px; border: 1.5px solid #000; }
-  .tot .row { display: flex; justify-content: space-between; padding: 6px 12px; font-size: 12px; }
-  .tot .row.total { border-top: 1px solid #000; font-size: 15px; font-weight: bold; }
+  .tot-wrap { display: flex; justify-content: flex-end; margin-top: 12px; }
+  .tot { width: 230px; border: 1.5px solid #000; }
+  .tot .row { display: flex; justify-content: space-between; padding: 5px 10px; font-size: 11px; }
+  .tot .row.total { border-top: 1px solid #000; font-size: 14px; font-weight: bold; }
 
-  /* Pie */
-  .foot { padding: 0 16px 18px; }
-  .pago { margin-top: 20px; font-size: 11px; }
-  .pago .ln { display: inline-block; border-bottom: 1px solid #777; min-width: 280px; }
-  .firma { margin-top: 66px; text-align: center; }
-  .firma .fl { border-top: 1px solid #000; width: 300px; margin: 0 auto; padding-top: 7px; font-size: 11px; }
+  .firma { margin-top: 34px; text-align: center; }
+  .firma .fl { border-top: 1px solid #000; width: 260px; margin: 0 auto; padding-top: 6px; font-size: 10px; }
 </style></head><body><div class="doc">
 
   <div class="banner">ORIGINAL</div>
 
   <div class="top">
     <div class="col-em">
-      <div class="em-nom">${MIS_DATOS.nombre}</div>
+      <div class="em-nom">${nombreHead}</div>
       <div class="em-sub">${MIS_DATOS.subtitulo || ''}</div>
-      <div class="em-mat">${MIS_DATOS.matriculas || ''}</div>
+      <div class="em-mat">${matHtml}</div>
       <div class="em-dom">${dom.dir}</div>
     </div>
-    <div class="box-tipo">
-      <div class="big">R</div>
-      <div class="sub">RECIBO</div>
-    </div>
+    <div class="box-tipo"><div class="big">R</div></div>
     <div class="col-r">
       <div class="r-tit">RECIBO</div>
       <div class="r-meta">
@@ -183,11 +183,9 @@ export function imprimirRecibo({ tipo, nroFmt, fecha, monto, moneda = 'ARS', con
   <div class="body">
     <table class="det">
       <thead><tr><th class="l">Detalle</th><th class="c">Cantidad</th><th class="r">Importe</th></tr></thead>
-      <tbody>
-        <tr><td class="l">${concepto || '—'}</td><td class="c">1</td><td class="r">${montoTxt}</td></tr>
-        <tr class="fill"><td class="l"></td><td class="c"></td><td class="r"></td></tr>
-      </tbody>
+      <tbody><tr><td class="l">${concepto || '—'}</td><td class="c">1</td><td class="r">${montoTxt}</td></tr></tbody>
     </table>
+    <div class="det-grow"><table><tbody><tr><td class="l"></td><td class="c"></td><td class="r"></td></tr></tbody></table></div>
 
     <div class="letras">Son ${letrasTxt}.</div>
 
@@ -197,9 +195,7 @@ export function imprimirRecibo({ tipo, nroFmt, fecha, monto, moneda = 'ARS', con
         <div class="row total"><span>TOTAL:</span><span>${montoTxt}</span></div>
       </div>
     </div>
-  </div>
 
-  <div class="foot">
     <div class="firma"><div class="fl">${firmaLabel}</div></div>
   </div>
 
