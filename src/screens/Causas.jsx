@@ -5,6 +5,29 @@ import { uid, dateFmt, fmtF, FUEROS_CIVILES, sumarHabiles, sumarCorridos, fechaL
 import Modal from '../components/Modal.jsx'
 import { imprimirRecibo, nextReciboNro, fmtNro } from '../lib/recibo.js'
 
+// Colores por jurisdicción (coinciden con la paleta del sistema)
+const TRIB_STYLE = {
+  PJN:  null,                                            // dorado por defecto del badge
+  SCBA: { background: '#1a5276', color: '#cfe3f0' },     // azul (mismo tono que USD)
+  EJE:  { background: '#1e6b4a', color: '#d3eadf' },                 // verde (mismo tono que OK)
+}
+
+// Normaliza texto para búsqueda: minúsculas y sin acentos
+const norm = s => (s || '').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+
+function FiltroChip({ active, onClick, children, style }) {
+  return (
+    <button
+      type="button"
+      className={`btn btn-xs ${active ? 'btn-primary' : 'btn-ghost'}`}
+      onClick={onClick}
+      style={{ fontFamily: 'IBM Plex Mono,monospace', fontSize: '.68rem', letterSpacing: '.03em', ...style }}
+    >
+      {children}
+    </button>
+  )
+}
+
 export function Causas({ navigate, store }) {
   const { causas, gastos } = store
   const [modal, setModal] = useState(false)
@@ -18,6 +41,11 @@ export function Causas({ navigate, store }) {
   const [estadoCausa, setEstadoCausa] = useState('activa')
   const [presupuesto, setPresupuesto] = useState('')
   const [moneda, setMoneda] = useState('ARS')
+
+  // ── Búsqueda y filtros ──
+  const [busqueda, setBusqueda] = useState('')
+  const [fTribunal, setFTribunal] = useState('todos')   // todos | PJN | SCBA | EJE
+  const [fEstado, setFEstado] = useState('activa')      // activa | archivada | todas
 
   const esCivil = FUEROS_CIVILES.includes(fuero)
 
@@ -41,22 +69,77 @@ export function Causas({ navigate, store }) {
     setModal(false)
   }
 
+  // ── Aplicar filtros ──
+  const q = norm(busqueda)
+  const filtradas = [...causas].reverse().filter(c => {
+    if (fTribunal !== 'todos' && c.tribunal !== fTribunal) return false
+    if (fEstado !== 'todas' && (c.estado || 'activa') !== fEstado) return false
+    if (q) {
+      const haystack = norm([c.caratula, c.cliente, c.nro, c.juzgado, c.fuero].filter(Boolean).join(' '))
+      if (!haystack.includes(q)) return false
+    }
+    return true
+  })
+
+  const countTrib = t => causas.filter(c => c.tribunal === t).length
+  const hayFiltros = busqueda || fTribunal !== 'todos' || fEstado !== 'activa'
+
   return (
     <div>
       <div className="page-header">
         <div className="page-title">Causas <small>REGISTRO DE EXPEDIENTES</small></div>
         <button className="btn btn-primary" onClick={()=>openModal()}>＋ Nueva</button>
       </div>
+
+      {/* ── Buscador + filtros ── */}
+      <div className="card" style={{padding:'.75rem .9rem', marginBottom:'.9rem'}}>
+        <input
+          className="form-control"
+          value={busqueda}
+          onChange={e=>setBusqueda(e.target.value)}
+          placeholder="🔍  Buscar por carátula, cliente, expediente, juzgado..."
+          style={{marginBottom:'.6rem'}}
+        />
+        <div style={{display:'flex',gap:'.35rem',flexWrap:'wrap',alignItems:'center'}}>
+          <FiltroChip active={fTribunal==='todos'} onClick={()=>setFTribunal('todos')}>TODAS ({causas.length})</FiltroChip>
+          <FiltroChip active={fTribunal==='PJN'} onClick={()=>setFTribunal('PJN')}>PJN ({countTrib('PJN')})</FiltroChip>
+          <FiltroChip active={fTribunal==='SCBA'} onClick={()=>setFTribunal('SCBA')}
+            style={fTribunal==='SCBA'?{background:'#1a5276',borderColor:'#1a5276'}:undefined}>SCBA ({countTrib('SCBA')})</FiltroChip>
+          <FiltroChip active={fTribunal==='EJE'} onClick={()=>setFTribunal('EJE')}
+            style={fTribunal==='EJE'?{background:'#1e6b4a',borderColor:'#1e6b4a'}:undefined}>EJE ({countTrib('EJE')})</FiltroChip>
+          <span style={{width:1,height:16,background:'var(--muted)',opacity:.35,margin:'0 .3rem'}} />
+          <FiltroChip active={fEstado==='activa'} onClick={()=>setFEstado('activa')}>ACTIVAS</FiltroChip>
+          <FiltroChip active={fEstado==='archivada'} onClick={()=>setFEstado('archivada')}>ARCHIVADAS</FiltroChip>
+          <FiltroChip active={fEstado==='todas'} onClick={()=>setFEstado('todas')}>TODAS</FiltroChip>
+          {hayFiltros && (
+            <span style={{marginLeft:'auto',fontSize:'.68rem',fontFamily:'IBM Plex Mono,monospace',color:'var(--muted)'}}>
+              {filtradas.length} de {causas.length}
+            </span>
+          )}
+        </div>
+      </div>
+
       <div style={{display:'flex',flexDirection:'column',gap:'.55rem'}}>
-        {causas.length===0&&<div className="empty-state"><div className="icon">📁</div><p>Sin causas. Creá la primera.</p></div>}
-        {[...causas].reverse().map(c=>{
+        {causas.length===0 && <div className="empty-state"><div className="icon">📁</div><p>Sin causas. Creá la primera.</p></div>}
+        {causas.length>0 && filtradas.length===0 && (
+          <div className="empty-state">
+            <div className="icon">🔍</div>
+            <p>Sin resultados para los filtros aplicados.</p>
+            <button className="btn btn-ghost btn-sm" style={{marginTop:'.5rem'}} onClick={()=>{setBusqueda('');setFTribunal('todos');setFEstado('activa')}}>Limpiar filtros</button>
+          </div>
+        )}
+        {filtradas.map(c=>{
           const tot = gastos.filter(g=>g.causa===c.id).reduce((s,g)=>s+(g.total||0),0)
           const saldo = c.presupuesto?c.presupuesto-tot:null
+          const archivada = (c.estado||'activa')==='archivada'
           return (
-            <div key={c.id} className="causa-card" onClick={()=>navigate('causa-detail',c.id)}>
-              <div className="causa-tribunal-badge">{c.tribunal}</div>
+            <div key={c.id} className="causa-card" onClick={()=>navigate('causa-detail',c.id)} style={archivada?{opacity:.55}:undefined}>
+              <div className="causa-tribunal-badge" style={TRIB_STYLE[c.tribunal]||undefined}>{c.tribunal}</div>
               <div className="causa-info">
-                <div className="causa-caratula">{c.caratula}</div>
+                <div className="causa-caratula">
+                  {c.caratula}
+                  {archivada && <span style={{marginLeft:'.5rem',fontSize:'.62rem',fontFamily:'IBM Plex Mono,monospace',color:'var(--muted)',border:'1px solid var(--muted)',borderRadius:3,padding:'.05rem .3rem',verticalAlign:'middle'}}>ARCHIVADA</span>}
+                </div>
                 <div className="causa-sub">{[c.fuero,c.juzgado,c.nro,c.cliente?'👤 '+c.cliente:''].filter(Boolean).join(' · ')}</div>
               </div>
               <div style={{display:'flex',gap:'.4rem',alignItems:'center'}} onClick={e=>e.stopPropagation()}>
