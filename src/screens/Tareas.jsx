@@ -17,7 +17,16 @@ export function Tareas({ store }) {
   const [notas, setNotas] = useState('')
   const [saving, setSaving] = useState(false)
 
+  // --- ESTADOS PARA AUTOCOMPLETE ---
+  const [busqueda, setBusqueda] = useState('')
+  const [mostrarSug, setMostrarSug] = useState(false)
+
   const getCNombre = (id) => { const c = causas.find(x=>x.id===id); return c?(c.caratula.length>35?c.caratula.substring(0,35)+'…':c.caratula):'' }
+
+  // Filtrado de causas en tiempo real
+  const causasFiltradas = busqueda.trim() !== '' 
+    ? causas.filter(c => c.caratula.toLowerCase().includes(busqueda.toLowerCase())).slice(0, 10)
+    : []
 
   const openModal = (id = null) => {
     setEditId(id)
@@ -25,9 +34,15 @@ export function Tareas({ store }) {
       const t = tareas.find(x=>x.id===id)
       setTitulo(t.titulo||''); setCausaId(t.causa||''); setCrit(t.criticidad||'normal')
       setVenc(t.vencimiento||''); setEstado(t.estado==='completada'?'en-curso':t.estado||'no-iniciada'); setNotas(t.notas||'')
+      
+      // Si estamos editando y tiene causa, precargamos el texto en el buscador
+      const causaExistente = causas.find(c => c.id === t.causa)
+      setBusqueda(causaExistente ? causaExistente.caratula : '')
     } else {
       setTitulo(''); setCausaId(''); setCrit('normal'); setVenc(''); setEstado('no-iniciada'); setNotas('')
+      setBusqueda('') // Limpiamos buscador en nueva tarea
     }
+    setMostrarSug(false)
     setModal(true)
   }
 
@@ -189,10 +204,51 @@ export function Tareas({ store }) {
       {modal && (
         <Modal title={editId?'Editar Tarea':'Nueva Tarea'} onClose={()=>setModal(false)}>
           <div className="form-row"><div className="form-group" style={{flex:2}}><label>Título *</label><input className="form-control" value={titulo} onChange={e=>setTitulo(e.target.value)} placeholder="Descripción de la tarea" /></div></div>
+          
           <div className="form-row">
-            <div className="form-group"><label>Causa</label><select className="form-control" value={causaId} onChange={e=>setCausaId(e.target.value)}><option value="">— General —</option>{causas.map(c=><option key={c.id} value={c.id}>{c.caratula.substring(0,45)}</option>)}</select></div>
+            {/* --- CAMPO CAUSA CON AUTOCOMPLETE --- */}
+            <div className="form-group" style={{ position: 'relative' }}>
+              <label>Causa</label>
+              <input 
+                type="text" 
+                className="form-control" 
+                placeholder="🔍 Escriba para buscar..." 
+                value={busqueda}
+                onChange={(e) => {
+                  setBusqueda(e.target.value)
+                  setMostrarSug(true)
+                  if (e.target.value === '') setCausaId('')
+                }}
+                onFocus={() => setMostrarSug(true)}
+              />
+              
+              {mostrarSug && busqueda.length > 0 && (
+                <div className="autocomplete-list">
+                  {causasFiltradas.length > 0 ? (
+                    causasFiltradas.map(c => (
+                      <div 
+                        key={c.id} 
+                        className="autocomplete-item"
+                        onClick={() => {
+                          setCausaId(c.id)
+                          setBusqueda(c.caratula)
+                          setMostrarSug(false)
+                        }}
+                      >
+                        {c.caratula}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="autocomplete-item no-res">Sin coincidencias</div>
+                  )}
+                </div>
+              )}
+              {causaId && <div style={{fontSize:'.7rem', color:'var(--primary)', marginTop:'2px'}}>✓ Seleccionada</div>}
+            </div>
+
             <div className="form-group"><label>Criticidad</label><select className="form-control" value={crit} onChange={e=>setCrit(e.target.value)}><option value="urgente">🔴 Urgente</option><option value="alta">🟠 Alta</option><option value="normal">🟢 Normal</option><option value="baja">⚪ Baja</option></select></div>
           </div>
+
           <div className="form-row">
             <div className="form-group"><label>Vencimiento</label><input type="date" className="form-control" value={venc} onChange={e=>{setVenc(e.target.value);if(e.target.value)setCrit('urgente')}} /></div>
             <div className="form-group"><label>Estado</label><select className="form-control" value={estado} onChange={e=>setEstado(e.target.value)}><option value="no-iniciada">⬜ No Iniciada</option><option value="en-curso">🔄 En Curso</option></select></div>
@@ -204,6 +260,38 @@ export function Tareas({ store }) {
           </div>
         </Modal>
       )}
+
+      {/* --- ESTILOS LOCALES PARA EL AUTOCOMPLETE --- */}
+      <style>{`
+        .autocomplete-list {
+          position: absolute;
+          top: 100%;
+          left: 0;
+          right: 0;
+          background: white;
+          border: 1px solid #ccc;
+          border-radius: 4px;
+          z-index: 1000;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+          max-height: 180px;
+          overflow-y: auto;
+        }
+        .autocomplete-item {
+          padding: 8px 12px;
+          cursor: pointer;
+          font-size: 0.85rem;
+          border-bottom: 1px solid #f0f0f0;
+          color: #333;
+        }
+        .autocomplete-item:hover {
+          background: #f0f7ff;
+          color: #000;
+        }
+        .autocomplete-item.no-res {
+          color: #999;
+          font-style: italic;
+        }
+      `}</style>
     </div>
   )
 }
