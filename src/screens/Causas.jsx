@@ -1,10 +1,9 @@
-// ── CAUSAS.JSX (CON FIX PARA EL BUILD) ────────────────────────
 import { useState } from 'react'
 import { saveCausa, deleteCausa } from '../lib/store.js'
 import { uid, fmtF } from '../lib/supabase.js'
 import Modal from '../components/Modal.jsx'
 
-// --- COMPONENTE 1: LA LISTA DE CAUSAS ---
+// --- COMPONENTE PRINCIPAL: CAUSAS ---
 export function Causas({ store }) {
   const { causas, registros } = store
   const [modal, setModal] = useState(false)
@@ -19,7 +18,7 @@ export function Causas({ store }) {
 
   const filteredCausas = causas.filter(c => 
     c.caratula.toLowerCase().includes(busqueda.toLowerCase()) ||
-    c.nro_expediente?.toLowerCase().includes(busqueda.toLowerCase())
+    (c.nro_expediente && c.nro_expediente.toLowerCase().includes(busqueda.toLowerCase()))
   )
 
   const openModal = (id = null) => {
@@ -36,7 +35,15 @@ export function Causas({ store }) {
 
   const handleSave = async () => {
     if (!caratula.trim()) return alert('La carátula es obligatoria')
-    const obj = { id: editId || uid(), caratula: caratula.trim(), portal, nro_expediente: nroExpediente, juzgado, estado, fecha_creacion: new Date().toISOString() }
+    const obj = { 
+      id: editId || uid(), 
+      caratula: caratula.trim(), 
+      portal, 
+      nro_expediente: nroExpediente, 
+      juzgado, 
+      estado, 
+      fecha_creacion: new Date().toISOString() 
+    }
     await saveCausa(obj)
     setModal(false)
   }
@@ -49,19 +56,26 @@ export function Causas({ store }) {
       </div>
 
       <div className="search-container" style={{marginBottom:'1rem'}}>
-        <input type="text" className="form-control" placeholder="🔍 Buscar causa..." value={busqueda} onChange={e => setBusqueda(e.target.value)} />
+        <input 
+          type="text" 
+          className="form-control" 
+          placeholder="🔍 Buscar causa o expediente..." 
+          value={busqueda} 
+          onChange={e => setBusqueda(e.target.value)} 
+        />
       </div>
 
-      <div className="causas-list">
+      <div className="causas-list" style={{display:'grid', gap:'1rem', gridTemplateColumns:'repeat(auto-fill, minmax(300px, 1fr))'}}>
         {filteredCausas.map(c => (
-          <div key={c.id} className="causa-card" style={{background:'white', padding:'1rem', borderRadius:'8px', border:'1px solid #eee', marginBottom:'.5rem'}}>
-            <div style={{display:'flex', justifyContent:'space-between'}}>
-                <span className={`badge ${c.portal}`}>{c.portal}</span>
-                <small>{c.nro_expediente}</small>
+          <div key={c.id} className="causa-card" style={{background:'white', padding:'1rem', borderRadius:'8px', border:'1px solid #eee', boxShadow:'0 2px 4px rgba(0,0,0,0.05)'}}>
+            <div style={{display:'flex', justifyContent:'space-between', marginBottom:'.5rem'}}>
+                <span className={`badge ${c.portal}`} style={{fontSize:'.7rem', padding:'2px 6px', borderRadius:'4px', background:'#eee'}}>{c.portal}</span>
+                <small style={{color:'#888', fontFamily:'monospace'}}>{c.nro_expediente}</small>
             </div>
-            <div style={{fontWeight:'bold', margin:'.5rem 0'}}>{c.caratula}</div>
-            <div className="causa-actions">
-                <button className="btn btn-ghost btn-xs" onClick={() => openModal(c.id)}>✏</button>
+            <div style={{fontWeight:'bold', color:'var(--primary)', marginBottom:'.5rem'}}>{c.caratula}</div>
+            <div style={{fontSize:'.8rem', color:'#666', marginBottom:'1rem'}}>🏛 {c.juzgado}</div>
+            <div className="causa-actions" style={{display:'flex', justifyContent:'flex-end', borderTop:'1px solid #f5f5f5', pt:'.5rem'}}>
+                <button className="btn btn-ghost btn-xs" onClick={() => openModal(c.id)}>✏ Editar</button>
             </div>
           </div>
         ))}
@@ -69,43 +83,48 @@ export function Causas({ store }) {
 
       {modal && (
         <Modal title={editId ? 'Editar Causa' : 'Nueva Causa'} onClose={() => setModal(false)}>
-          <div className="form-group"><label>Carátula</label><input className="form-control" value={caratula} onChange={e => setCaratula(e.target.value)} /></div>
-          <button className="btn btn-primary" onClick={handleSave}>Guardar</button>
+          <div className="form-group"><label>Carátula *</label><input className="form-control" value={caratula} onChange={e => setCaratula(e.target.value)} /></div>
+          <div className="form-row">
+            <div className="form-group"><label>Portal</label><select className="form-control" value={portal} onChange={e => setPortal(e.target.value)}><option>PJN</option><option>SCBA</option><option>EJE</option></select></div>
+            <div className="form-group"><label>Nro Exp.</label><input className="form-control" value={nroExpediente} onChange={e => setNroExpediente(e.target.value)} /></div>
+          </div>
+          <div className="form-group"><label>Juzgado</label><input className="form-control" value={juzgado} onChange={e => setJuzgado(e.target.value)} /></div>
+          <div style={{display:'flex', justifyContent:'flex-end', gap:'.6rem', mt:'1rem'}}>
+            <button className="btn btn-ghost" onClick={() => setModal(false)}>Cancelar</button>
+            <button className="btn btn-primary" onClick={handleSave}>Guardar</button>
+          </div>
         </Modal>
       )}
     </div>
   )
 }
 
-// --- COMPONENTE 2: EL DETALLE DE LA CAUSA (LO QUE FALTABA) ---
+// --- COMPONENTE SECUNDARIO: DETALLE ---
 export function CausaDetail({ store, causaId }) {
   const { causas, registros } = store
   const causa = causas.find(c => c.id === causaId)
   const misRegistros = registros.filter(r => r.causa === causaId).reverse()
 
-  if (!causa) return <div className="p-4">Causa no encontrada</div>
+  if (!causa) return <div style={{padding:'2rem'}}>Causa no encontrada.</div>
 
   return (
-    <div className="causa-detail">
-      <div className="detail-header" style={{marginBottom:'1.5rem'}}>
-        <h2>{causa.caratula}</h2>
-        <div style={{display:'flex', gap:'1rem', color:'#666'}}>
-            <span><strong>Exp:</strong> {causa.nro_expediente}</span>
-            <span><strong>Portal:</strong> {causa.portal}</span>
-        </div>
-      </div>
-
-      <div className="timeline">
-        <h4>Historial de Novedades</h4>
-        {misRegistros.length === 0 && <p>No hay registros para esta causa.</p>}
+    <div className="causa-detail" style={{padding:'1rem'}}>
+      <h2 style={{margin:'0 0 .5rem 0'}}>{causa.caratula}</h2>
+      <p style={{color:'#666', marginBottom:'2rem'}}>Expediente {causa.nro_expediente} — {causa.portal}</p>
+      
+      <h4>Historial de movimientos</h4>
+      <div className="timeline" style={{marginTop:'1rem'}}>
         {misRegistros.map(r => (
-          <div key={r.id} className="timeline-item" style={{padding:'1rem', borderLeft:'2px solid #ddd', marginBottom:'1rem', marginLeft:'1rem'}}>
-            <div style={{fontSize:'.8rem', color:'#888'}}>{fmtF(r.fecha)}</div>
-            <div style={{fontWeight:'500'}}>{r.novedad}</div>
-            {r.estrategia && <div style={{fontSize:'.9rem', color:'#555', fontStyle:'italic'}}>💡 {r.estrategia}</div>}
+          <div key={r.id} style={{padding:'1rem', borderLeft:'2px solid var(--primary)', marginBottom:'1rem', background:'#f9f9f9', marginLeft:'1rem'}}>
+            <small style={{display:'block', color:'#888'}}>{fmtF(r.fecha)}</small>
+            <div style={{marginTop:'.3rem'}}>{r.novedad}</div>
           </div>
         ))}
+        {misRegistros.length === 0 && <p style={{color:'#999'}}>No hay movimientos registrados.</p>}
       </div>
     </div>
   )
 }
+
+// IMPORTANTE: Exportación por defecto para que App.jsx no falle
+export default Causas;
