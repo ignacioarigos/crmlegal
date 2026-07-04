@@ -5,29 +5,6 @@ import { uid, dateFmt, fmtF, FUEROS_CIVILES, sumarHabiles, sumarCorridos, fechaL
 import Modal from '../components/Modal.jsx'
 import { imprimirRecibo, nextReciboNro, fmtNro } from '../lib/recibo.js'
 
-// Colores por jurisdicción (coinciden con la paleta del sistema)
-const TRIB_STYLE = {
-  PJN:  null,                                            // dorado por defecto del badge
-  SCBA: { background: '#1a5276', color: '#cfe3f0' },     // azul (mismo tono que USD)
-  EJE:  { background: '#1e6b4a', color: '#d3eadf' },                 // verde (mismo tono que OK)
-}
-
-// Normaliza texto para búsqueda: minúsculas y sin acentos
-const norm = s => (s || '').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-
-function FiltroChip({ active, onClick, children, style }) {
-  return (
-    <button
-      type="button"
-      className={`btn btn-xs ${active ? 'btn-primary' : 'btn-ghost'}`}
-      onClick={onClick}
-      style={{ fontFamily: 'IBM Plex Mono,monospace', fontSize: '.68rem', letterSpacing: '.03em', ...style }}
-    >
-      {children}
-    </button>
-  )
-}
-
 export function Causas({ navigate, store }) {
   const { causas, gastos } = store
   const [modal, setModal] = useState(false)
@@ -41,11 +18,6 @@ export function Causas({ navigate, store }) {
   const [estadoCausa, setEstadoCausa] = useState('activa')
   const [presupuesto, setPresupuesto] = useState('')
   const [moneda, setMoneda] = useState('ARS')
-
-  // ── Búsqueda y filtros ──
-  const [busqueda, setBusqueda] = useState('')
-  const [fTribunal, setFTribunal] = useState('todos')   // todos | PJN | SCBA | EJE
-  const [fEstado, setFEstado] = useState('activa')      // activa | archivada | todas
 
   const esCivil = FUEROS_CIVILES.includes(fuero)
 
@@ -69,82 +41,26 @@ export function Causas({ navigate, store }) {
     setModal(false)
   }
 
-  // ── Aplicar filtros ──
-  const q = norm(busqueda)
-  const filtradas = [...causas].reverse().filter(c => {
-    if (fTribunal !== 'todos' && c.tribunal !== fTribunal) return false
-    if (fEstado !== 'todas' && (c.estado || 'activa') !== fEstado) return false
-    if (q) {
-      const haystack = norm([c.caratula, c.cliente, c.nro, c.juzgado, c.fuero].filter(Boolean).join(' '))
-      if (!haystack.includes(q)) return false
-    }
-    return true
-  })
-
-  const countTrib = t => causas.filter(c => c.tribunal === t).length
-  const hayFiltros = busqueda || fTribunal !== 'todos' || fEstado !== 'activa'
-
   return (
     <div>
       <div className="page-header">
         <div className="page-title">Causas <small>REGISTRO DE EXPEDIENTES</small></div>
         <button className="btn btn-primary" onClick={()=>openModal()}>＋ Nueva</button>
       </div>
-
-      {/* ── Buscador + filtros ── */}
-      <div className="card" style={{padding:'.75rem .9rem', marginBottom:'.9rem'}}>
-        <input
-          className="form-control"
-          value={busqueda}
-          onChange={e=>setBusqueda(e.target.value)}
-          placeholder="🔍  Buscar por carátula, cliente, expediente, juzgado..."
-          style={{marginBottom:'.6rem'}}
-        />
-        <div style={{display:'flex',gap:'.35rem',flexWrap:'wrap',alignItems:'center'}}>
-          <FiltroChip active={fTribunal==='todos'} onClick={()=>setFTribunal('todos')}>TODAS ({causas.length})</FiltroChip>
-          <FiltroChip active={fTribunal==='PJN'} onClick={()=>setFTribunal('PJN')}>PJN ({countTrib('PJN')})</FiltroChip>
-          <FiltroChip active={fTribunal==='SCBA'} onClick={()=>setFTribunal('SCBA')}
-            style={fTribunal==='SCBA'?{background:'#1a5276',borderColor:'#1a5276'}:undefined}>SCBA ({countTrib('SCBA')})</FiltroChip>
-          <FiltroChip active={fTribunal==='EJE'} onClick={()=>setFTribunal('EJE')}
-            style={fTribunal==='EJE'?{background:'#1e6b4a',borderColor:'#1e6b4a'}:undefined}>EJE ({countTrib('EJE')})</FiltroChip>
-          <span style={{width:1,height:16,background:'var(--muted)',opacity:.35,margin:'0 .3rem'}} />
-          <FiltroChip active={fEstado==='activa'} onClick={()=>setFEstado('activa')}>ACTIVAS</FiltroChip>
-          <FiltroChip active={fEstado==='archivada'} onClick={()=>setFEstado('archivada')}>ARCHIVADAS</FiltroChip>
-          <FiltroChip active={fEstado==='todas'} onClick={()=>setFEstado('todas')}>TODAS</FiltroChip>
-          {hayFiltros && (
-            <span style={{marginLeft:'auto',fontSize:'.68rem',fontFamily:'IBM Plex Mono,monospace',color:'var(--muted)'}}>
-              {filtradas.length} de {causas.length}
-            </span>
-          )}
-        </div>
-      </div>
-
       <div style={{display:'flex',flexDirection:'column',gap:'.55rem'}}>
-        {causas.length===0 && <div className="empty-state"><div className="icon">📁</div><p>Sin causas. Creá la primera.</p></div>}
-        {causas.length>0 && filtradas.length===0 && (
-          <div className="empty-state">
-            <div className="icon">🔍</div>
-            <p>Sin resultados para los filtros aplicados.</p>
-            <button className="btn btn-ghost btn-sm" style={{marginTop:'.5rem'}} onClick={()=>{setBusqueda('');setFTribunal('todos');setFEstado('activa')}}>Limpiar filtros</button>
-          </div>
-        )}
-        {filtradas.map(c=>{
+        {causas.length===0&&<div className="empty-state"><div className="icon">📁</div><p>Sin causas. Creá la primera.</p></div>}
+        {[...causas].reverse().map(c=>{
           const tot = gastos.filter(g=>g.causa===c.id).reduce((s,g)=>s+(g.total||0),0)
           const saldo = c.presupuesto?c.presupuesto-tot:null
-          const archivada = (c.estado||'activa')==='archivada'
           return (
-            <div key={c.id} className="causa-card" onClick={()=>navigate('causa-detail',c.id)} style={archivada?{opacity:.55}:undefined}>
-              <div className="causa-tribunal-badge" style={TRIB_STYLE[c.tribunal]||undefined}>{c.tribunal}</div>
+            <div key={c.id} className="causa-card" onClick={()=>navigate('causa-detail',c.id)}>
+              <div className="causa-tribunal-badge">{c.tribunal}</div>
               <div className="causa-info">
-                <div className="causa-caratula">
-                  {c.caratula}
-                  {archivada && <span style={{marginLeft:'.5rem',fontSize:'.62rem',fontFamily:'IBM Plex Mono,monospace',color:'var(--muted)',border:'1px solid var(--muted)',borderRadius:3,padding:'.05rem .3rem',verticalAlign:'middle'}}>ARCHIVADA</span>}
-                </div>
+                <div className="causa-caratula">{c.caratula}</div>
                 <div className="causa-sub">{[c.fuero,c.juzgado,c.nro,c.cliente?'👤 '+c.cliente:''].filter(Boolean).join(' · ')}</div>
               </div>
               <div style={{display:'flex',gap:'.4rem',alignItems:'center'}} onClick={e=>e.stopPropagation()}>
                 {saldo!=null&&<span style={{fontSize:'.72rem',fontFamily:'IBM Plex Mono,monospace',color:saldo<0?'var(--urgent)':'var(--ok)',fontWeight:700}}>{saldo<0?'⚠ -$'+(tot-c.presupuesto).toLocaleString('es-AR'):'💰 $'+saldo.toLocaleString('es-AR')}</span>}
-                <button className="btn btn-ghost btn-xs" title={archivada?'Desarchivar':'Archivar'} onClick={()=>saveCausa({ ...c, estado: archivada?'activa':'archivada' })}>{archivada?'📂':'📦'}</button>
                 <button className="btn btn-ghost btn-xs" onClick={()=>openModal(c.id)}>✏</button>
                 <span style={{color:'var(--muted)',fontSize:'1.1rem',cursor:'pointer'}} onClick={()=>navigate('causa-detail',c.id)}>›</span>
               </div>
@@ -201,6 +117,7 @@ export function CausaDetail({ id, navigate, store }) {
   const [gCant, setGCant] = useState(1)
   const [gPrecio, setGPrecio] = useState('')
   const [gFecha, setGFecha] = useState(dateFmt(new Date()))
+  const [selGastos, setSelGastos] = useState(new Set())
 
   // ── Nueva Tarea ──
   const [tareaModal, setTareaModal] = useState(false)
@@ -274,7 +191,6 @@ export function CausaDetail({ id, navigate, store }) {
   const handleSaveMovimiento = async () => {
     if (!mPortal || !mNovedad.trim()) return alert('Complete portal y novedad.')
     if (movEditId) {
-      // Editar existente usando saveRegistro con upsert
       const original = registros.find(x => x.id === movEditId)
       const patch = {
         portal: mPortal,
@@ -452,16 +368,33 @@ export function CausaDetail({ id, navigate, store }) {
     setGastoModal(false); setGTramiteId(''); setGCant(1); setGPrecio('')
   }
 
-  // Emitir recibo desde el detalle de la causa (usa el tribunal de la causa para el domicilio)
+  // Recibo de un cobro (uno por fila)
   const emitirReciboCobro = async (cb) => {
     let nro = cb.recibo_nro
     if (!nro) { nro = nextReciboNro(cobros); await saveCobro({ ...cb, recibo_nro: nro }) }
     imprimirRecibo({ tipo:'cobro', nroFmt: fmtNro('REC', nro), fecha: cb.fecha, monto: cb.monto, moneda: cb.moneda||'ARS', concepto: cb.concepto, tribunal: c.tribunal })
   }
-  const emitirReciboGasto = async (g) => {
-    let nro = g.recibo_nro
-    if (!nro) { nro = nextReciboNro(gastos); await saveGasto({ ...g, recibo_nro: nro }) }
-    imprimirRecibo({ tipo:'pago', nroFmt: fmtNro('PAG', nro), fecha: g.fecha||dateFmt(new Date()), monto: g.total, moneda:'ARS', concepto: g.tramite_nombre, tribunal: c.tribunal })
+
+  // Selección múltiple de gastos + un solo recibo con todos los seleccionados
+  const toggleGasto = (gid) => {
+    setSelGastos((prev) => { const n = new Set(prev); n.has(gid) ? n.delete(gid) : n.add(gid); return n })
+  }
+  const emitirReciboGastos = async () => {
+    const seleccion = gList.filter((g) => selGastos.has(g.id))
+    if (!seleccion.length) return
+    const nro = nextReciboNro(gastos)
+    for (const g of seleccion) {
+      if (g.recibo_nro !== nro) await saveGasto({ ...g, recibo_nro: nro })
+    }
+    imprimirRecibo({
+      tipo: 'pago',
+      nroFmt: fmtNro('PAG', nro),
+      fecha: dateFmt(new Date()),
+      moneda: 'ARS',
+      tribunal: c.tribunal,
+      items: seleccion.map((g) => ({ concepto: g.tramite_nombre, cantidad: g.cant, monto: g.total })),
+    })
+    setSelGastos(new Set())
   }
 
   return (
@@ -481,7 +414,6 @@ export function CausaDetail({ id, navigate, store }) {
           <button className="btn btn-ghost btn-sm" style={{color:'var(--paper)',borderColor:'#555'}} onClick={()=>setGastoModal(true)}>+ Gasto</button>
           <button className="btn btn-ghost btn-sm" style={{color:'var(--paper)',borderColor:'#555'}} onClick={()=>setCobroModal(true)}>+ Cobro</button>
           <button className="btn btn-ghost btn-sm" style={{color:'var(--paper)',borderColor:'#555'}} onClick={handlePrintCausa}>🖨</button>
-          <button className="btn btn-ghost btn-sm" style={{color:'var(--paper)',borderColor:'#555'}} onClick={()=>saveCausa({ ...c, estado:(c.estado||'activa')==='archivada'?'activa':'archivada' })}>{(c.estado||'activa')==='archivada'?'📂 Desarchivar':'📦 Archivar'}</button>
           <button className="btn btn-danger btn-sm" onClick={()=>{if(confirm('¿Eliminar causa y todos sus datos?')){deleteCausa(id);navigate('causas')}}}>Eliminar</button>
         </div>
       </div>
@@ -560,13 +492,36 @@ export function CausaDetail({ id, navigate, store }) {
       {/* Gastos */}
       <h3 style={{fontFamily:'Playfair Display,serif',fontSize:'1.05rem',marginBottom:'.65rem'}}>Gastos</h3>
       {gList.length===0?<p style={{color:'var(--muted)',fontSize:'.83rem',marginBottom:'1.3rem'}}>Sin gastos.</p>:(
-        <div className="table-wrapper" style={{marginBottom:'1.3rem'}}>
-          <table>
-            <thead><tr><th>Trámite</th><th>Cant.</th><th>P.U.</th><th>Total</th><th>Fecha</th><th></th></tr></thead>
-            <tbody>{gList.map(g=><tr key={g.id}><td>{g.tramite_nombre}{g.recibo_nro?<span style={{fontFamily:'IBM Plex Mono,monospace',fontSize:'.68rem',color:'var(--muted)',marginLeft:'.4rem'}}>{fmtNro('PAG',g.recibo_nro)}</span>:null}</td><td className="num">{g.cant}</td><td className="num">${(g.precio_u||0).toLocaleString('es-AR')}</td><td className="num" style={{fontWeight:700}}>${(g.total||0).toLocaleString('es-AR')}</td><td>{g.fecha?fmtF(g.fecha):'-'}</td><td><button className="btn btn-ghost btn-xs" title="Emitir recibo" onClick={()=>emitirReciboGasto(g)}>🧾</button></td></tr>)}</tbody>
-            <tfoot><tr className="tfoot-row"><td colSpan="3" style={{padding:'.6rem .9rem'}}>TOTAL</td><td className="num" style={{padding:'.6rem .9rem',fontWeight:700}}>${tot.toLocaleString('es-AR')}</td><td colSpan="2"></td></tr></tfoot>
-          </table>
-        </div>
+        <>
+          <div style={{display:'flex',justifyContent:'flex-end',marginBottom:'.5rem'}}>
+            <button className="btn btn-primary btn-sm" disabled={selGastos.size===0} onClick={emitirReciboGastos}>
+              🧾 Emitir recibo{selGastos.size>0?` (${selGastos.size})`:''}
+            </button>
+          </div>
+          <div className="table-wrapper" style={{marginBottom:'1.3rem'}}>
+            <table>
+              <thead><tr>
+                <th style={{width:32,textAlign:'center'}}>
+                  <input type="checkbox"
+                    checked={gList.length>0 && selGastos.size===gList.length}
+                    onChange={e=>setSelGastos(e.target.checked ? new Set(gList.map(g=>g.id)) : new Set())} />
+                </th>
+                <th>Trámite</th><th>Cant.</th><th>P.U.</th><th>Total</th><th>Fecha</th>
+              </tr></thead>
+              <tbody>{gList.map(g=>(
+                <tr key={g.id} style={selGastos.has(g.id)?{background:'var(--cream)'}:undefined}>
+                  <td style={{textAlign:'center'}}><input type="checkbox" checked={selGastos.has(g.id)} onChange={()=>toggleGasto(g.id)} /></td>
+                  <td>{g.tramite_nombre}{g.recibo_nro?<span style={{fontFamily:'IBM Plex Mono,monospace',fontSize:'.68rem',color:'var(--muted)',marginLeft:'.4rem'}}>{fmtNro('PAG',g.recibo_nro)}</span>:null}</td>
+                  <td className="num">{g.cant}</td>
+                  <td className="num">${(g.precio_u||0).toLocaleString('es-AR')}</td>
+                  <td className="num" style={{fontWeight:700}}>${(g.total||0).toLocaleString('es-AR')}</td>
+                  <td>{g.fecha?fmtF(g.fecha):'-'}</td>
+                </tr>
+              ))}</tbody>
+              <tfoot><tr className="tfoot-row"><td></td><td colSpan="3" style={{padding:'.6rem .9rem'}}>TOTAL</td><td className="num" style={{padding:'.6rem .9rem',fontWeight:700}}>${tot.toLocaleString('es-AR')}</td><td></td></tr></tfoot>
+            </table>
+          </div>
+        </>
       )}
 
       {/* Cobros */}
@@ -636,7 +591,6 @@ export function CausaDetail({ id, navigate, store }) {
             </div>
             {mTieneVenc&&(
               <div>
-                {/* Vencimiento ya calculado (modo edición) */}
                 {mVencResult&&!mCalcMsg&&(
                   <div className="vencimiento-result" style={{marginBottom:'.6rem'}}>{mVencResult.texto}</div>
                 )}
@@ -654,7 +608,6 @@ export function CausaDetail({ id, navigate, store }) {
               </div>
             )}
           </div>
-          {/* Opción generar tarea solo en nuevo movimiento */}
           {!movEditId&&(
             <div className="card" style={{background:'var(--cream)',marginBottom:'.9rem',padding:'.9rem'}}>
               <div className="checkbox-row">
