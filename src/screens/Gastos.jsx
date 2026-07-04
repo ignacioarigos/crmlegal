@@ -1,8 +1,11 @@
 import { useState } from 'react'
 import { saveGasto, deleteGasto, updateTramite, deleteTramite, addTramite, resetTramites } from '../lib/store.js'
 import { uid, dateFmt, fmtF, TRAMITES_DEFAULT } from '../lib/supabase.js'
-import { imprimirRecibo, nextReciboNro, fmtNro } from '../lib/recibo.js'
 import Modal from '../components/Modal.jsx'
+import { imprimirRecibo, nextReciboNro, fmtNro } from '../lib/recibo.js'
+
+// normaliza acentos y mayúsculas para búsqueda por coincidencia
+const norm = (s) => (s || '').toString().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
 
 export default function Gastos({ store }) {
   const { gastos, causas, tramites } = store
@@ -39,7 +42,7 @@ export default function Gastos({ store }) {
     setModal(false)
   }
 
-  // Emite (o re-imprime) el recibo de un pago. Asigna número la primera vez.
+  // Recibo por fila (pago). Usa el tribunal de la causa asociada para el domicilio.
   const emitirRecibo = async (g) => {
     let nro = g.recibo_nro
     if (!nro) {
@@ -58,7 +61,16 @@ export default function Gastos({ store }) {
     })
   }
 
-  let list = filtro ? gastos.filter(g=>g.causa===filtro) : gastos
+  // Filtro por coincidencia de texto (trámite, carátula de la causa, cliente)
+  const q = norm(filtro)
+  let list = gastos
+  if (q) {
+    list = gastos.filter(g => {
+      const c = causas.find(x => x.id === g.causa)
+      const heno = norm([g.tramite_nombre, c?.caratula, c?.cliente].filter(Boolean).join(' '))
+      return heno.includes(q)
+    })
+  }
   list = [...list].reverse()
   const totFiltrado = list.reduce((s,g)=>s+(g.total||0),0)
 
@@ -76,23 +88,27 @@ export default function Gastos({ store }) {
       {tab==='registros'&&(
         <>
           <div style={{marginBottom:'.9rem',display:'flex',gap:'.6rem',alignItems:'center',flexWrap:'wrap'}}>
-            <select className="form-control" value={filtro} onChange={e=>setFiltro(e.target.value)} style={{maxWidth:300,flex:1}}>
-              <option value="">— Todas las causas —</option>
-              {causas.map(c=><option key={c.id} value={c.id}>{c.caratula.substring(0,50)}</option>)}
-            </select>
+            <input
+              className="form-control"
+              value={filtro}
+              onChange={e=>setFiltro(e.target.value)}
+              placeholder="Buscar por trámite, causa o cliente…"
+              style={{maxWidth:360,flex:1}}
+            />
+            {filtro && (
+              <button className="btn btn-ghost btn-sm" onClick={()=>setFiltro('')}>✕ Limpiar</button>
+            )}
+            {q && <span style={{fontSize:'.75rem',color:'var(--muted)',fontFamily:'IBM Plex Mono,monospace'}}>{list.length} resultado{list.length===1?'':'s'}</span>}
           </div>
           <div className="table-wrapper">
             <table>
               <thead><tr><th>Causa</th><th>Trámite</th><th>Cant.</th><th>P.U.</th><th>Total</th><th>Fecha</th><th></th></tr></thead>
               <tbody>
-                {list.length===0&&<tr><td colSpan="7" style={{textAlign:'center',padding:'1.5rem',color:'var(--muted)'}}>Sin gastos</td></tr>}
+                {list.length===0&&<tr><td colSpan="7" style={{textAlign:'center',padding:'1.5rem',color:'var(--muted)'}}>{q?'Sin coincidencias':'Sin gastos'}</td></tr>}
                 {list.map(g=>(
                   <tr key={g.id}>
                     <td style={{maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{getCNombre(g.causa)}</td>
-                    <td>
-                      {g.tramite_nombre}
-                      {g.recibo_nro ? <span style={{fontFamily:'IBM Plex Mono, monospace',fontSize:'.68rem',color:'var(--muted)',marginLeft:'.4rem'}}>{fmtNro('PAG', g.recibo_nro)}</span> : null}
-                    </td>
+                    <td>{g.tramite_nombre}{g.recibo_nro?<span style={{fontFamily:'IBM Plex Mono,monospace',fontSize:'.68rem',color:'var(--muted)',marginLeft:'.4rem'}}>{fmtNro('PAG',g.recibo_nro)}</span>:null}</td>
                     <td className="num">{g.cant}</td>
                     <td className="num">${(g.precio_u||0).toLocaleString('es-AR')}</td>
                     <td className="num" style={{fontWeight:700}}>${(g.total||0).toLocaleString('es-AR')}</td>
