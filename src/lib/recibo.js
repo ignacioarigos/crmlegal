@@ -1,5 +1,6 @@
 // src/lib/recibo.js
 import { fmtF } from './supabase.js'
+import firmaSelloUrl from '../../firma-sello.png'
 
 // ╔══════════════════════════════════════════════════════════════╗
 // ║  TUS DATOS — encabezado del recibo                            ║
@@ -11,7 +12,7 @@ export const MIS_DATOS = {
     'T° 120  F° 824  —  C.P.A.C.F.',
     'T° LVII  F° 344  —  C.A.S.I.',
   ],
-  firmaSello: '/firma-sello.png',   // colocar el archivo en /public
+  firmaSello: firmaSelloUrl,   // importada desde la raíz del repo (Vite la empaqueta y resuelve la URL)
   domicilios: {
     PJN:  { dir: 'Paraná N° 597, Piso 2, Of. "15", C.A.B.A.',        lugar: 'C.A.B.A.' },
     SCBA: { dir: 'Adolfo Alsina N° 1.756, Florida, Vicente López.',   lugar: 'Vicente López' },
@@ -86,13 +87,12 @@ function loadHtml2Pdf() {
     document.head.appendChild(s)
   })
 }
-function preload(src) {
-  return new Promise((resolve) => {
-    if (!src) return resolve()
-    const im = new Image()
-    im.onload = im.onerror = () => resolve()
-    im.src = src
-  })
+function waitImages(root) {
+  const imgs = Array.from(root.querySelectorAll('img'))
+  return Promise.all(imgs.map((img) => {
+    if (img.complete && img.naturalWidth > 0) return Promise.resolve()
+    return new Promise((res) => { img.onload = () => res(); img.onerror = () => res() })
+  }))
 }
 
 // Devuelve el HTML del recibo con TODOS los estilos en línea (nada depende de CSS externo).
@@ -108,9 +108,8 @@ function construir({ tipo, nroFmt, fecha, monto, moneda, concepto, tribunal }) {
   const fechaTxt = fecha ? fmtF(fecha) : fmtF(new Date().toISOString().slice(0, 10))
   const nombreHead = `IA&nbsp;&nbsp;|&nbsp;&nbsp;${MIS_DATOS.nombre.toUpperCase()}`
   const matHtml = (MIS_DATOS.matriculas || []).map(m => `<div>${m}</div>`).join('')
-  const firmaSrc = MIS_DATOS.firmaSello
-    ? (MIS_DATOS.firmaSello.startsWith('http') ? MIS_DATOS.firmaSello : window.location.origin + MIS_DATOS.firmaSello)
-    : ''
+  const raw = MIS_DATOS.firmaSello || ''
+  const firmaSrc = /^(https?:|data:)/.test(raw) ? raw : (raw.startsWith('/') ? window.location.origin + raw : raw)
 
   // celdas del detalle
   const thBase = `${F}background:#ececec;color:#000;border:1px solid #000;padding:5px 8px;font-size:9px;text-transform:uppercase;letter-spacing:.04em;`
@@ -196,7 +195,7 @@ function construir({ tipo, nroFmt, fecha, monto, moneda, concepto, tribunal }) {
 // Genera y DESCARGA el PDF automáticamente (A5). Si falla el CDN, cae a impresión.
 export async function imprimirRecibo(opts) {
   const moneda = opts.moneda || 'ARS'
-  const { html, firmaSrc } = construir({ ...opts, moneda })
+  const { html } = construir({ ...opts, moneda })
 
   try {
     const html2pdf = await loadHtml2Pdf()
@@ -204,13 +203,13 @@ export async function imprimirRecibo(opts) {
     host.style.cssText = 'position:fixed; left:-10000px; top:0; z-index:-1; background:#fff;'
     host.innerHTML = html
     document.body.appendChild(host)
-    await preload(firmaSrc)
+    await waitImages(host)
     try {
       await html2pdf().set({
         margin: 5,
         filename: `${opts.nroFmt}.pdf`,
         image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 3, backgroundColor: '#ffffff', useCORS: true },
+        html2canvas: { scale: 3, backgroundColor: '#ffffff', useCORS: true, imageTimeout: 15000 },
         jsPDF: { unit: 'mm', format: 'a5', orientation: 'portrait' },
         pagebreak: { mode: ['avoid-all'] },
       }).from(host.querySelector('.rcb-doc')).save()
