@@ -96,11 +96,15 @@ function waitImages(root) {
 }
 
 // Devuelve el HTML del recibo con TODOS los estilos en línea (nada depende de CSS externo).
-function construir({ tipo, nroFmt, fecha, monto, moneda, concepto, tribunal }) {
+function construir({ tipo, nroFmt, fecha, monto, moneda, concepto, tribunal, items }) {
   const esCobro  = tipo === 'cobro'
   const simbolo  = moneda === 'USD' ? 'U$S' : '$'
-  const montoTxt = `${simbolo} ${(monto || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-  const letrasTxt = montoEnLetras(monto, moneda)
+  const fmtMonto = (v) => `${simbolo} ${(v || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  const rows = (items && items.length) ? items : [{ concepto: concepto || '—', cantidad: 1, monto: monto || 0 }]
+  const total = rows.reduce((s, it) => s + (Number(it.monto) || 0), 0)
+  const fillerH = Math.max(30, 150 - (rows.length - 1) * 26)
+  const montoTxt = fmtMonto(total)
+  const letrasTxt = montoEnLetras(total, moneda)
   const banda = esCobro
     ? 'Recibí la suma que se detalla a continuación:'
     : 'Se deja constancia del pago según el siguiente detalle:'
@@ -158,13 +162,13 @@ function construir({ tipo, nroFmt, fecha, monto, moneda, concepto, tribunal }) {
         <th style="${thBase}text-align:center;width:70px;">Cantidad</th>
         <th style="${thBase}text-align:right;width:120px;">Importe</th>
       </tr>
+      ${rows.map((it) => `<tr>
+        <td style="${tdBase}font-weight:bold;">${it.concepto || '—'}</td>
+        <td style="${tdBase}text-align:center;">${it.cantidad ?? 1}</td>
+        <td style="${tdBase}text-align:right;">${fmtMonto(it.monto)}</td>
+      </tr>`).join('')}
       <tr>
-        <td style="${tdBase}font-weight:bold;">${concepto || '—'}</td>
-        <td style="${tdBase}text-align:center;">1</td>
-        <td style="${tdBase}text-align:right;">${montoTxt}</td>
-      </tr>
-      <tr>
-        <td style="${fillTd}height:150px;"></td>
+        <td style="${fillTd}height:${fillerH}px;"></td>
         <td style="${fillTd}"></td>
         <td style="${fillTd}"></td>
       </tr>
