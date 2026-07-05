@@ -5,6 +5,9 @@ import { uid, dateFmt, fmtF, FUEROS_CIVILES, sumarHabiles, sumarCorridos, fechaL
 import Modal from '../components/Modal.jsx'
 import { imprimirRecibo, nextReciboNro, fmtNro } from '../lib/recibo.js'
 
+// normaliza acentos y mayúsculas para búsqueda por coincidencia
+const norm = (s) => (s || '').toString().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+
 export function Causas({ navigate, store }) {
   const { causas, gastos } = store
   const [modal, setModal] = useState(false)
@@ -18,6 +21,11 @@ export function Causas({ navigate, store }) {
   const [estadoCausa, setEstadoCausa] = useState('activa')
   const [presupuesto, setPresupuesto] = useState('')
   const [moneda, setMoneda] = useState('ARS')
+
+  // Búsqueda + filtros
+  const [busqueda, setBusqueda] = useState('')
+  const [fTribunal, setFTribunal] = useState('todos')
+  const [fEstado, setFEstado] = useState('activas')
 
   const esCivil = FUEROS_CIVILES.includes(fuero)
 
@@ -41,26 +49,63 @@ export function Causas({ navigate, store }) {
     setModal(false)
   }
 
+  // Archivar / desarchivar (spread del objeto completo para no pisar campos)
+  const toggleArchivo = async (c) => {
+    await saveCausa({ ...c, estado: (c.estado === 'archivada' ? 'activa' : 'archivada') })
+  }
+
+  // Filtrado: estado → tribunal → texto
+  const q = norm(busqueda)
+  let lista = [...causas].reverse()
+  if (fEstado !== 'todas') {
+    const target = fEstado === 'archivadas' ? 'archivada' : 'activa'
+    lista = lista.filter(c => (c.estado || 'activa') === target)
+  }
+  if (fTribunal !== 'todos') lista = lista.filter(c => c.tribunal === fTribunal)
+  if (q) lista = lista.filter(c => norm([c.caratula, c.cliente, c.nro, c.juzgado, c.fuero].filter(Boolean).join(' ')).includes(q))
+  const chip = (activo) => `btn btn-sm ${activo ? 'btn-primary' : 'btn-ghost'}`
+
   return (
     <div>
       <div className="page-header">
         <div className="page-title">Causas <small>REGISTRO DE EXPEDIENTES</small></div>
         <button className="btn btn-primary" onClick={()=>openModal()}>＋ Nueva</button>
       </div>
+
+      {/* Buscador */}
+      <div style={{display:'flex',gap:'.6rem',alignItems:'center',flexWrap:'wrap',marginBottom:'.7rem'}}>
+        <input className="form-control" value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="Buscar por carátula, cliente, N° de expediente…" style={{flex:1,minWidth:220,maxWidth:440}} />
+        {busqueda && <button className="btn btn-ghost btn-sm" onClick={()=>setBusqueda('')}>✕ Limpiar</button>}
+        {(q || fTribunal!=='todos' || fEstado!=='activas') && <span style={{fontSize:'.75rem',color:'var(--muted)',fontFamily:'IBM Plex Mono,monospace'}}>{lista.length} resultado{lista.length===1?'':'s'}</span>}
+      </div>
+
+      {/* Chips de filtro */}
+      <div style={{display:'flex',gap:'.4rem',alignItems:'center',flexWrap:'wrap',marginBottom:'.9rem'}}>
+        {[['todos','Todos'],['PJN','PJN'],['SCBA','SCBA'],['EJE','EJE']].map(([v,l])=>(
+          <button key={v} className={chip(fTribunal===v)} onClick={()=>setFTribunal(v)}>{l}</button>
+        ))}
+        <span style={{width:1,alignSelf:'stretch',minHeight:20,background:'var(--muted)',opacity:.25,margin:'0 .25rem'}} />
+        {[['activas','Activas'],['archivadas','Archivadas'],['todas','Todas']].map(([v,l])=>(
+          <button key={v} className={chip(fEstado===v)} onClick={()=>setFEstado(v)}>{l}</button>
+        ))}
+      </div>
+
       <div style={{display:'flex',flexDirection:'column',gap:'.55rem'}}>
-        {causas.length===0&&<div className="empty-state"><div className="icon">📁</div><p>Sin causas. Creá la primera.</p></div>}
-        {[...causas].reverse().map(c=>{
+        {lista.length===0&&<div className="empty-state"><div className="icon">📁</div><p>{(q||fTribunal!=='todos'||fEstado!=='activas')?'Sin coincidencias.':'Sin causas. Creá la primera.'}</p></div>}
+        {lista.map(c=>{
           const tot = gastos.filter(g=>g.causa===c.id).reduce((s,g)=>s+(g.total||0),0)
           const saldo = c.presupuesto?c.presupuesto-tot:null
+          const archivada = (c.estado||'activa')==='archivada'
           return (
-            <div key={c.id} className="causa-card" onClick={()=>navigate('causa-detail',c.id)}>
+            <div key={c.id} className="causa-card" style={archivada?{opacity:.62}:undefined} onClick={()=>navigate('causa-detail',c.id)}>
               <div className="causa-tribunal-badge">{c.tribunal}</div>
               <div className="causa-info">
-                <div className="causa-caratula">{c.caratula}</div>
+                <div className="causa-caratula">{c.caratula}{archivada&&<span style={{marginLeft:'.5rem',fontSize:'.6rem',fontFamily:'IBM Plex Mono,monospace',color:'var(--muted)',border:'1px solid var(--muted)',borderRadius:4,padding:'0 .35rem',verticalAlign:'middle'}}>ARCHIVADA</span>}</div>
                 <div className="causa-sub">{[c.fuero,c.juzgado,c.nro,c.cliente?'👤 '+c.cliente:''].filter(Boolean).join(' · ')}</div>
               </div>
               <div style={{display:'flex',gap:'.4rem',alignItems:'center'}} onClick={e=>e.stopPropagation()}>
                 {saldo!=null&&<span style={{fontSize:'.72rem',fontFamily:'IBM Plex Mono,monospace',color:saldo<0?'var(--urgent)':'var(--ok)',fontWeight:700}}>{saldo<0?'⚠ -$'+(tot-c.presupuesto).toLocaleString('es-AR'):'💰 $'+saldo.toLocaleString('es-AR')}</span>}
+                <button className="btn btn-ghost btn-xs" title={archivada?'Desarchivar':'Archivar'} onClick={()=>toggleArchivo(c)}>{archivada?'↩':'🗄'}</button>
                 <button className="btn btn-ghost btn-xs" onClick={()=>openModal(c.id)}>✏</button>
                 <span style={{color:'var(--muted)',fontSize:'1.1rem',cursor:'pointer'}} onClick={()=>navigate('causa-detail',c.id)}>›</span>
               </div>
@@ -332,6 +377,8 @@ export function CausaDetail({ id, navigate, store }) {
 
   if (!c) return <div className="empty-state"><p>Causa no encontrada</p></div>
 
+  const archivada = (c.estado||'activa')==='archivada'
+
   const movs   = registros.filter(r=>r.causa===id)
   const gList  = gastos.filter(g=>g.causa===id)
   const cbList = cobros.filter(cb=>cb.causa===id)
@@ -366,6 +413,11 @@ export function CausaDetail({ id, navigate, store }) {
     const tr = tramites.find(t=>t.id===gTramiteId)
     await saveGasto({ id: uid(), causa: id, tramite_id: gTramiteId, tramite_nombre: tr?tr.nombre:'—', cant: parseFloat(gCant)||1, precio_u: parseFloat(gPrecio)||0, total: (parseFloat(gCant)||1)*(parseFloat(gPrecio)||0), fecha: gFecha||null })
     setGastoModal(false); setGTramiteId(''); setGCant(1); setGPrecio('')
+  }
+
+  // Archivar / desarchivar desde el detalle
+  const toggleArchivo = async () => {
+    await saveCausa({ ...c, estado: archivada ? 'activa' : 'archivada' })
   }
 
   // Recibo de un cobro (uno por fila)
@@ -403,7 +455,7 @@ export function CausaDetail({ id, navigate, store }) {
 
       <div className="causa-detail-header">
         <div style={{flex:1}}>
-          <div className="causa-detail-title">{c.caratula}</div>
+          <div className="causa-detail-title">{c.caratula}{archivada&&<span style={{marginLeft:'.5rem',fontSize:'.6rem',fontFamily:'IBM Plex Mono,monospace',color:'var(--muted)',border:'1px solid var(--muted)',borderRadius:4,padding:'0 .35rem',verticalAlign:'middle'}}>ARCHIVADA</span>}</div>
           <div className="causa-detail-sub">{[c.tribunal,c.fuero,c.juzgado,c.nro].filter(Boolean).join(' · ')}</div>
           {c.cliente&&<div className="causa-detail-sub">👤 {c.cliente}</div>}
           {pptoBar}
@@ -414,6 +466,7 @@ export function CausaDetail({ id, navigate, store }) {
           <button className="btn btn-ghost btn-sm" style={{color:'var(--paper)',borderColor:'#555'}} onClick={()=>setGastoModal(true)}>+ Gasto</button>
           <button className="btn btn-ghost btn-sm" style={{color:'var(--paper)',borderColor:'#555'}} onClick={()=>setCobroModal(true)}>+ Cobro</button>
           <button className="btn btn-ghost btn-sm" style={{color:'var(--paper)',borderColor:'#555'}} onClick={handlePrintCausa}>🖨</button>
+          <button className="btn btn-ghost btn-sm" style={{color:'var(--paper)',borderColor:'#555'}} onClick={toggleArchivo}>{archivada?'↩ Desarchivar':'🗄 Archivar'}</button>
           <button className="btn btn-danger btn-sm" onClick={()=>{if(confirm('¿Eliminar causa y todos sus datos?')){deleteCausa(id);navigate('causas')}}}>Eliminar</button>
         </div>
       </div>
