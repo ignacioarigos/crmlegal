@@ -8,8 +8,10 @@ import { imprimirRecibo, nextReciboNro, fmtNro } from '../lib/recibo.js'
 // normaliza acentos y mayúsculas para búsqueda por coincidencia
 const norm = (s) => (s || '').toString().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
 
+const mono = 'IBM Plex Mono,monospace'
+
 export function Causas({ navigate, store }) {
-  const { causas, gastos } = store
+  const { causas, gastos, registros } = store
   const [modal, setModal] = useState(false)
   const [editId, setEditId] = useState(null)
   const [caratula, setCaratula] = useState('')
@@ -26,6 +28,12 @@ export function Causas({ navigate, store }) {
   const [busqueda, setBusqueda] = useState('')
   const [fTribunal, setFTribunal] = useState('todos')
   const [fEstado, setFEstado] = useState('activas')
+
+  // Vista + orden (persistidos)
+  const [vista, setVista] = useState(() => { try { return localStorage.getItem('ia_causas_vista') || 'cards' } catch { return 'cards' } })
+  const [orden, setOrden] = useState(() => { try { return localStorage.getItem('ia_causas_orden') || 'actividad' } catch { return 'actividad' } })
+  const setVistaP = (v) => { setVista(v); try { localStorage.setItem('ia_causas_vista', v) } catch {} }
+  const setOrdenP = (v) => { setOrden(v); try { localStorage.setItem('ia_causas_orden', v) } catch {} }
 
   const esCivil = FUEROS_CIVILES.includes(fuero)
 
@@ -54,16 +62,59 @@ export function Causas({ navigate, store }) {
     await saveCausa({ ...c, estado: (c.estado === 'archivada' ? 'activa' : 'archivada') })
   }
 
+  // Última actividad y cantidad de movimientos por causa
+  const actMap = {}
+  const movMap = {}
+  for (const r of (registros || [])) {
+    if (!r.causa) continue
+    movMap[r.causa] = (movMap[r.causa] || 0) + 1
+    const f = r.fecha || ''
+    if (!actMap[r.causa] || f > actMap[r.causa]) actMap[r.causa] = f
+  }
+  const actividad = (c) => actMap[c.id] || c.fecha || ''
+
   // Filtrado: estado → tribunal → texto
   const q = norm(busqueda)
-  let lista = [...causas].reverse()
+  let lista = [...causas]
   if (fEstado !== 'todas') {
     const target = fEstado === 'archivadas' ? 'archivada' : 'activa'
     lista = lista.filter(c => (c.estado || 'activa') === target)
   }
   if (fTribunal !== 'todos') lista = lista.filter(c => c.tribunal === fTribunal)
   if (q) lista = lista.filter(c => norm([c.caratula, c.cliente, c.nro, c.juzgado, c.fuero].filter(Boolean).join(' ')).includes(q))
+
+  // Ordenamiento
+  if (orden === 'alfabetico') {
+    lista.sort((a,b)=>(a.caratula||'').localeCompare(b.caratula||'', 'es'))
+  } else if (orden === 'cliente') {
+    lista.sort((a,b)=>{
+      const ca=(a.cliente||'').trim(), cb=(b.cliente||'').trim()
+      if(!ca&&!cb) return (a.caratula||'').localeCompare(b.caratula||'', 'es')
+      if(!ca) return 1
+      if(!cb) return -1
+      return ca.localeCompare(cb,'es') || (a.caratula||'').localeCompare(b.caratula||'', 'es')
+    })
+  } else if (orden === 'recientes') {
+    lista.sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''))
+  } else {
+    // última actividad (movimiento más reciente; si no hay, fecha de alta)
+    lista.sort((a,b)=>actividad(b).localeCompare(actividad(a)))
+  }
+
   const chip = (activo) => `btn btn-sm ${activo ? 'btn-primary' : 'btn-ghost'}`
+
+  const saldoDe = (c) => {
+    const tot = gastos.filter(g=>g.causa===c.id).reduce((s,g)=>s+(g.total||0),0)
+    return { tot, saldo: c.presupuesto ? c.presupuesto - tot : null }
+  }
+
+  const saldoTag = (c) => {
+    const { tot, saldo } = saldoDe(c)
+    if (saldo == null) return null
+    return <span style={{fontSize:'.72rem',fontFamily:mono,color:saldo<0?'var(--urgent)':'var(--ok)',fontWeight:700}}>{saldo<0?'⚠ -$'+(tot-c.presupuesto).toLocaleString('es-AR'):'💰 $'+saldo.toLocaleString('es-AR')}</span>
+  }
+
+  const archTag = <span style={{marginLeft:'.5rem',fontSize:'.6rem',fontFamily:mono,color:'var(--muted)',border:'1px solid var(--muted)',borderRadius:4,padding:'0 .35rem',verticalAlign:'middle'}}>ARCHIVADA</span>
 
   return (
     <div>
@@ -76,10 +127,10 @@ export function Causas({ navigate, store }) {
       <div style={{display:'flex',gap:'.6rem',alignItems:'center',flexWrap:'wrap',marginBottom:'.7rem'}}>
         <input className="form-control" value={busqueda} onChange={e=>setBusqueda(e.target.value)} placeholder="Buscar por carátula, cliente, N° de expediente…" style={{flex:1,minWidth:220,maxWidth:440}} />
         {busqueda && <button className="btn btn-ghost btn-sm" onClick={()=>setBusqueda('')}>✕ Limpiar</button>}
-        {(q || fTribunal!=='todos' || fEstado!=='activas') && <span style={{fontSize:'.75rem',color:'var(--muted)',fontFamily:'IBM Plex Mono,monospace'}}>{lista.length} resultado{lista.length===1?'':'s'}</span>}
+        {(q || fTribunal!=='todos' || fEstado!=='activas') && <span style={{fontSize:'.75rem',color:'var(--muted)',fontFamily:mono}}>{lista.length} resultado{lista.length===1?'':'s'}</span>}
       </div>
 
-      {/* Chips de filtro */}
+      {/* Chips de filtro + orden + vista */}
       <div style={{display:'flex',gap:'.4rem',alignItems:'center',flexWrap:'wrap',marginBottom:'.9rem'}}>
         {[['todos','Todos'],['PJN','PJN'],['SCBA','SCBA'],['EJE','EJE']].map(([v,l])=>(
           <button key={v} className={chip(fTribunal===v)} onClick={()=>setFTribunal(v)}>{l}</button>
@@ -88,31 +139,89 @@ export function Causas({ navigate, store }) {
         {[['activas','Activas'],['archivadas','Archivadas'],['todas','Todas']].map(([v,l])=>(
           <button key={v} className={chip(fEstado===v)} onClick={()=>setFEstado(v)}>{l}</button>
         ))}
+        <div style={{marginLeft:'auto',display:'flex',gap:'.4rem',alignItems:'center'}}>
+          <label style={{fontSize:'.7rem',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.04em'}}>Ordenar</label>
+          <select className="form-control" value={orden} onChange={e=>setOrdenP(e.target.value)} style={{width:'auto',padding:'.3rem .5rem',fontSize:'.78rem'}}>
+            <option value="actividad">Última actividad</option>
+            <option value="recientes">Alta más reciente</option>
+            <option value="alfabetico">Carátula A–Z</option>
+            <option value="cliente">Cliente A–Z</option>
+          </select>
+          <span style={{width:1,alignSelf:'stretch',minHeight:20,background:'var(--muted)',opacity:.25,margin:'0 .1rem'}} />
+          <button className={chip(vista==='lista')} title="Vista lista" onClick={()=>setVistaP('lista')}>☰</button>
+          <button className={chip(vista==='cards')} title="Vista tarjetas" onClick={()=>setVistaP('cards')}>▦</button>
+        </div>
       </div>
 
-      <div style={{display:'flex',flexDirection:'column',gap:'.55rem'}}>
-        {lista.length===0&&<div className="empty-state"><div className="icon">📁</div><p>{(q||fTribunal!=='todos'||fEstado!=='activas')?'Sin coincidencias.':'Sin causas. Creá la primera.'}</p></div>}
-        {lista.map(c=>{
-          const tot = gastos.filter(g=>g.causa===c.id).reduce((s,g)=>s+(g.total||0),0)
-          const saldo = c.presupuesto?c.presupuesto-tot:null
-          const archivada = (c.estado||'activa')==='archivada'
-          return (
-            <div key={c.id} className="causa-card" style={archivada?{opacity:.62}:undefined} onClick={()=>navigate('causa-detail',c.id)}>
-              <div className="causa-tribunal-badge">{c.tribunal}</div>
-              <div className="causa-info">
-                <div className="causa-caratula">{c.caratula}{archivada&&<span style={{marginLeft:'.5rem',fontSize:'.6rem',fontFamily:'IBM Plex Mono,monospace',color:'var(--muted)',border:'1px solid var(--muted)',borderRadius:4,padding:'0 .35rem',verticalAlign:'middle'}}>ARCHIVADA</span>}</div>
-                <div className="causa-sub">{[c.fuero,c.juzgado,c.nro,c.cliente?'👤 '+c.cliente:''].filter(Boolean).join(' · ')}</div>
+      {lista.length===0&&<div className="empty-state"><div className="icon">📁</div><p>{(q||fTribunal!=='todos'||fEstado!=='activas')?'Sin coincidencias.':'Sin causas. Creá la primera.'}</p></div>}
+
+      {/* ── Vista LISTA ── */}
+      {vista==='lista' && lista.length>0 && (
+        <div style={{display:'flex',flexDirection:'column',gap:'.55rem'}}>
+          {lista.map(c=>{
+            const archivada = (c.estado||'activa')==='archivada'
+            const act = actividad(c)
+            return (
+              <div key={c.id} className="causa-card" style={archivada?{opacity:.62}:undefined} onClick={()=>navigate('causa-detail',c.id)}>
+                <div className="causa-tribunal-badge">{c.tribunal}</div>
+                <div className="causa-info">
+                  <div className="causa-caratula">{c.caratula}{archivada&&archTag}</div>
+                  <div className="causa-sub">{[c.fuero,c.juzgado,c.nro,c.cliente?'👤 '+c.cliente:''].filter(Boolean).join(' · ')}</div>
+                </div>
+                <div style={{display:'flex',gap:'.4rem',alignItems:'center'}} onClick={e=>e.stopPropagation()}>
+                  {act&&<span style={{fontSize:'.66rem',fontFamily:mono,color:'var(--muted)',whiteSpace:'nowrap'}} title="Última actividad">⏱ {fmtF(act)}</span>}
+                  {saldoTag(c)}
+                  <button className="btn btn-ghost btn-xs" title={archivada?'Desarchivar':'Archivar'} onClick={()=>toggleArchivo(c)}>{archivada?'↩':'🗄'}</button>
+                  <button className="btn btn-ghost btn-xs" onClick={()=>openModal(c.id)}>✏</button>
+                  <span style={{color:'var(--muted)',fontSize:'1.1rem',cursor:'pointer'}} onClick={()=>navigate('causa-detail',c.id)}>›</span>
+                </div>
               </div>
-              <div style={{display:'flex',gap:'.4rem',alignItems:'center'}} onClick={e=>e.stopPropagation()}>
-                {saldo!=null&&<span style={{fontSize:'.72rem',fontFamily:'IBM Plex Mono,monospace',color:saldo<0?'var(--urgent)':'var(--ok)',fontWeight:700}}>{saldo<0?'⚠ -$'+(tot-c.presupuesto).toLocaleString('es-AR'):'💰 $'+saldo.toLocaleString('es-AR')}</span>}
-                <button className="btn btn-ghost btn-xs" title={archivada?'Desarchivar':'Archivar'} onClick={()=>toggleArchivo(c)}>{archivada?'↩':'🗄'}</button>
-                <button className="btn btn-ghost btn-xs" onClick={()=>openModal(c.id)}>✏</button>
-                <span style={{color:'var(--muted)',fontSize:'1.1rem',cursor:'pointer'}} onClick={()=>navigate('causa-detail',c.id)}>›</span>
+            )
+          })}
+        </div>
+      )}
+
+      {/* ── Vista TARJETAS ── */}
+      {vista==='cards' && lista.length>0 && (
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(300px,1fr))',gap:'.75rem'}}>
+          {lista.map(c=>{
+            const archivada = (c.estado||'activa')==='archivada'
+            const act = actividad(c)
+            const nMovs = movMap[c.id]||0
+            return (
+              <div key={c.id} className="card" onClick={()=>navigate('causa-detail',c.id)}
+                style={{cursor:'pointer',display:'flex',flexDirection:'column',gap:'.5rem',opacity:archivada?.62:1}}>
+                {/* header: tribunal + última actividad */}
+                <div style={{display:'flex',alignItems:'center',gap:'.5rem'}}>
+                  <div className="causa-tribunal-badge">{c.tribunal}</div>
+                  {archivada&&archTag}
+                  <span style={{marginLeft:'auto',fontSize:'.66rem',fontFamily:mono,color:'var(--muted)',whiteSpace:'nowrap'}} title="Última actividad">⏱ {act?fmtF(act):'—'}</span>
+                </div>
+                {/* carátula */}
+                <div style={{fontFamily:'Playfair Display,serif',fontWeight:800,fontSize:'.94rem',lineHeight:1.32,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}} title={c.caratula}>
+                  {c.caratula}
+                </div>
+                {/* datos */}
+                <div style={{fontSize:'.74rem',color:'var(--muted)'}}>
+                  {[c.fuero,c.juzgado,c.nro].filter(Boolean).join(' · ')||'—'}
+                </div>
+                {c.cliente&&<div style={{fontSize:'.76rem'}}>👤 {c.cliente}</div>}
+                {/* footer */}
+                <div style={{display:'flex',alignItems:'center',gap:'.5rem',marginTop:'auto',paddingTop:'.5rem',borderTop:'1px solid rgba(128,128,128,.18)'}} onClick={e=>e.stopPropagation()}>
+                  <span style={{fontSize:'.68rem',fontFamily:mono,color:'var(--muted)'}}>{nMovs} mov{nMovs===1?'':'s'}.</span>
+                  {saldoTag(c)}
+                  <span style={{marginLeft:'auto',display:'flex',gap:'.3rem'}}>
+                    <button className="btn btn-ghost btn-xs" title={archivada?'Desarchivar':'Archivar'} onClick={()=>toggleArchivo(c)}>{archivada?'↩':'🗄'}</button>
+                    <button className="btn btn-ghost btn-xs" onClick={()=>openModal(c.id)}>✏</button>
+                    <button className="btn btn-ghost btn-xs" onClick={()=>navigate('causa-detail',c.id)}>›</button>
+                  </span>
+                </div>
               </div>
-            </div>
-          )
-        })}
-      </div>
+            )
+          })}
+        </div>
+      )}
+
       {modal&&(
         <Modal title={editId?'Editar Causa':'Nueva Causa'} onClose={()=>setModal(false)}>
           <div className="form-group" style={{marginBottom:'.9rem'}}><label>Carátula *</label><input className="form-control" value={caratula} onChange={e=>setCaratula(e.target.value)} placeholder="Ej: GARCÍA, Juan c/ EMPRESA S.A. s/ Despido" /></div>
