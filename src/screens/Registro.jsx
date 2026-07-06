@@ -23,6 +23,10 @@ export function Registro({ store }) {
   const [busqueda, setBusqueda] = useState('')
   const [mostrarSug, setMostrarSug] = useState(false)
 
+  // --- ACORDEÓN POR MES ---
+  const [abiertos, setAbiertos] = useState(new Set())
+  const [tocado, setTocado] = useState(false)
+
   const getCNombre = (id) => { 
     const c = causas.find(x => x.id === id); 
     return c ? (c.caratula.length > 35 ? c.caratula.substring(0, 35) + '…' : c.caratula) : '' 
@@ -71,6 +75,7 @@ export function Registro({ store }) {
         fecha: new Date().toISOString() 
       })
     }
+    abrirMes(obj.fecha.substring(0, 7)) // abre el mes de la novedad recién guardada
     setModal(false); resetForm()
   }
 
@@ -84,6 +89,35 @@ export function Registro({ store }) {
   const portales = ['todos', 'PJN', 'SCBA', 'EJE']
   let list = [...registros].reverse()
   if (tab !== 'todos') list = list.filter(r => r.portal === tab)
+
+  // Agrupar por mes (clave YYYY-MM), meses ordenados del más nuevo al más viejo
+  const grupos = {}
+  list.forEach(r => {
+    const key = (r.fecha || '').substring(0, 7) || '0000-00'
+    if (!grupos[key]) grupos[key] = []
+    grupos[key].push(r)
+  })
+  const meses = Object.keys(grupos).sort((a, b) => b.localeCompare(a))
+
+  // Estado abierto/cerrado. Por defecto (sin interacción) solo el mes más reciente abierto.
+  const seed = () => (tocado ? new Set(abiertos) : new Set(meses.slice(0, 1)))
+  const isOpen = (key, idx) => (tocado ? abiertos.has(key) : idx === 0)
+  const toggleMes = (key) => {
+    const base = seed()
+    base.has(key) ? base.delete(key) : base.add(key)
+    setAbiertos(base); setTocado(true)
+  }
+  const abrirMes = (key) => {
+    const base = seed()
+    base.add(key)
+    setAbiertos(base); setTocado(true)
+  }
+
+  const mesLabel = (key) => {
+    const [y, m] = key.split('-')
+    return new Date(parseInt(y), parseInt(m) - 1, 1)
+      .toLocaleDateString('es-AR', { month: 'long', year: 'numeric' }).toUpperCase()
+  }
 
   return (
     <div>
@@ -100,23 +134,55 @@ export function Registro({ store }) {
         ))}
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '.55rem' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '.5rem' }}>
         {list.length === 0 && <div className="empty-state"><div className="icon">📋</div><p>Sin registros</p></div>}
-        {list.map(r => (
-          <div key={r.id} className="registro-entry">
-            <div className="registro-portal">{r.portal}</div>
-            <div className="registro-body">
-              <div className="registro-novedad">{r.novedad}</div>
-              {r.estrategia && <div className="registro-estrategia">💡 {r.estrategia}</div>}
-              <div className="registro-meta">
-                <span>{fmtF(r.fecha)}</span>
-                {r.tiene_vencimiento && r.vencimiento_texto && <span className="registro-venc">{r.vencimiento_texto}</span>}
-                {r.causa && <span>{getCNombre(r.causa)}</span>}
+
+        {meses.map((key, idx) => {
+          const items = grupos[key]
+          const open = isOpen(key, idx)
+          return (
+            <div key={key}>
+              {/* Cabecera del mes (clic para plegar/desplegar) */}
+              <div
+                onClick={() => toggleMes(key)}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  cursor: 'pointer', userSelect: 'none', padding: '.55rem .85rem',
+                  background: 'var(--cream)', borderRadius: 6, marginBottom: open ? '.5rem' : '0'
+                }}
+              >
+                <span style={{ fontFamily: 'Playfair Display, serif', fontWeight: 700, fontSize: '.95rem', letterSpacing: '.02em' }}>
+                  {mesLabel(key)}
+                </span>
+                <span style={{ fontSize: '.72rem', color: 'var(--muted)', fontFamily: 'IBM Plex Mono, monospace', display: 'flex', gap: '.6rem', alignItems: 'center' }}>
+                  <span>{items.length} novedad{items.length === 1 ? '' : 'es'}</span>
+                  <span style={{ fontSize: '.65rem' }}>{open ? '▲' : '▼'}</span>
+                </span>
               </div>
+
+              {/* Cuerpo del mes */}
+              {open && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '.55rem', marginBottom: '.9rem' }}>
+                  {items.map(r => (
+                    <div key={r.id} className="registro-entry">
+                      <div className="registro-portal">{r.portal}</div>
+                      <div className="registro-body">
+                        <div className="registro-novedad">{r.novedad}</div>
+                        {r.estrategia && <div className="registro-estrategia">💡 {r.estrategia}</div>}
+                        <div className="registro-meta">
+                          <span>{fmtF(r.fecha)}</span>
+                          {r.tiene_vencimiento && r.vencimiento_texto && <span className="registro-venc">{r.vencimiento_texto}</span>}
+                          {r.causa && <span>{getCNombre(r.causa)}</span>}
+                        </div>
+                      </div>
+                      <button className="btn btn-ghost btn-xs" onClick={() => { if (confirm('¿Eliminar?')) deleteRegistro(r.id) }} style={{ alignSelf: 'flex-start' }}>🗑</button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-            <button className="btn btn-ghost btn-xs" onClick={() => { if (confirm('¿Eliminar?')) deleteRegistro(r.id) }} style={{ alignSelf: 'flex-start' }}>🗑</button>
-          </div>
-        ))}
+          )
+        })}
       </div>
 
       {modal && (
