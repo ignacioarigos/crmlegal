@@ -4,6 +4,42 @@ import { saveTarea, deleteTarea, patchTarea } from '../lib/store.js'
 import { uid, dateFmt, fmtF } from '../lib/supabase.js'
 import Modal from '../components/Modal.jsx'
 
+// ── Helpers de fecha (locales, sin desfase UTC) ──
+const hoyISO = () => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+// Días entre hoy y el vencimiento (negativo = vencida)
+const diasHasta = (venc) => {
+  if (!venc) return null
+  const [y, m, d] = venc.split('-').map(Number)
+  const target = new Date(y, m - 1, d)
+  const [hy, hm, hd] = hoyISO().split('-').map(Number)
+  const hoy = new Date(hy, hm - 1, hd)
+  return Math.round((target - hoy) / 86400000)
+}
+
+// Estado de vencimiento: 'vencida' | 'hoy' | 'proxima' (<=3 días) | null
+const estadoVenc = (t) => {
+  const d = diasHasta(t.vencimiento)
+  if (d === null) return null
+  if (d < 0) return 'vencida'
+  if (d === 0) return 'hoy'
+  if (d <= 3) return 'proxima'
+  return 'futura'
+}
+
+const labelVenc = (t) => {
+  const d = diasHasta(t.vencimiento)
+  if (d === null) return null
+  if (d < -1) return `VENCIDA · hace ${-d} días`
+  if (d === -1) return 'VENCIDA · ayer'
+  if (d === 0) return '⚠ VENCE HOY'
+  if (d === 1) return 'Vence mañana'
+  return `Vence en ${d} días`
+}
+
 export function Tareas({ store }) {
   const { tareas, causas } = store
   const [tab, setTab] = useState('activas')
@@ -24,7 +60,7 @@ export function Tareas({ store }) {
   const getCNombre = (id) => { const c = causas.find(x=>x.id===id); return c?(c.caratula.length>35?c.caratula.substring(0,35)+'…':c.caratula):'' }
 
   // Filtrado de causas en tiempo real
-  const causasFiltradas = busqueda.trim() !== '' 
+  const causasFiltradas = busqueda.trim() !== ''
     ? causas.filter(c => c.caratula.toLowerCase().includes(busqueda.toLowerCase())).slice(0, 10)
     : []
 
@@ -34,13 +70,11 @@ export function Tareas({ store }) {
       const t = tareas.find(x=>x.id===id)
       setTitulo(t.titulo||''); setCausaId(t.causa||''); setCrit(t.criticidad||'normal')
       setVenc(t.vencimiento||''); setEstado(t.estado==='completada'?'en-curso':t.estado||'no-iniciada'); setNotas(t.notas||'')
-      
-      // Si estamos editando y tiene causa, precargamos el texto en el buscador
       const causaExistente = causas.find(c => c.id === t.causa)
       setBusqueda(causaExistente ? causaExistente.caratula : '')
     } else {
       setTitulo(''); setCausaId(''); setCrit('normal'); setVenc(''); setEstado('no-iniciada'); setNotas('')
-      setBusqueda('') // Limpiamos buscador en nueva tarea
+      setBusqueda('')
     }
     setMostrarSug(false)
     setModal(true)
@@ -67,32 +101,49 @@ export function Tareas({ store }) {
     await patchTarea(t.id, { criticidad: next })
   }
 
+  // ── Ordenamiento y agrupación ──
+  const co = { urgente:0, alta:1, normal:2, baja:3 }
+  const byVenc = (a,b) => { if(!a.vencimiento&&!b.vencimiento)return 0; if(!a.vencimiento)return 1; if(!b.vencimiento)return -1; return a.vencimiento.localeCompare(b.vencimiento) }
+  const srt = arr => [...arr].sort((a,b)=>byVenc(a,b)||((co[a.criticidad]||2)-(co[b.criticidad]||2)))
+
+  const activos    = tareas.filter(t=>t.estado!=='completada')
+  const archivados = [...tareas.filter(t=>t.estado==='completada')].reverse()
+
+  const vencidas   = srt(activos.filter(t=>estadoVenc(t)==='vencida'))
+  const hoy        = srt(activos.filter(t=>estadoVenc(t)==='hoy'))
+  const resto      = activos.filter(t=>!['vencida','hoy'].includes(estadoVenc(t)))
+
+  const sections = [
+    { key:'vencidas',  label: '🔥 Vencidas',     items: vencidas, cls:'sec-vencida' },
+    { key:'hoy',       label: '📅 Vencen hoy',   items: hoy,      cls:'sec-hoy' },
+    { key:'urgentes',  label: '🔴 Urgentes',     items: srt(resto.filter(t=>t.criticidad==='urgente')), cls:'' },
+    { key:'encurso',   label: '🔄 En curso',     items: srt(resto.filter(t=>t.criticidad!=='urgente'&&t.estado==='en-curso')), cls:'' },
+    { key:'noinic',    label: '⬜ No iniciadas', items: srt(resto.filter(t=>t.criticidad!=='urgente'&&t.estado==='no-iniciada')), cls:'' },
+  ]
+
+  // ── Impresión ──
   const handlePrint = () => {
-    const co = { urgente:0, alta:1, normal:2, baja:3 }
-    const byVenc = (a,b) => { if(!a.vencimiento&&!b.vencimiento)return 0; if(!a.vencimiento)return 1; if(!b.vencimiento)return -1; return a.vencimiento.localeCompare(b.vencimiento) }
-    const activos = [...tareas.filter(t=>t.estado!=='completada')].sort((a,b)=>(co[a.criticidad]||2)-(co[b.criticidad]||2)||byVenc(a,b))
     const critMap = { urgente:'🔴 URGENTE', alta:'🟠 ALTA', normal:'🟢 NORMAL', baja:'⚪ BAJA' }
     const estadoMap = { 'no-iniciada':'No iniciada', 'en-curso':'En curso' }
-    const sections = [
-      { label: '🔴 Urgentes',     items: activos.filter(t=>t.criticidad==='urgente') },
-      { label: '🔄 En curso',     items: activos.filter(t=>t.criticidad!=='urgente'&&t.estado==='en-curso') },
-      { label: '⬜ No iniciadas', items: activos.filter(t=>t.criticidad!=='urgente'&&t.estado==='no-iniciada') },
-    ]
+    const secColors = { 'sec-vencida':'#fbe4e4', 'sec-hoy':'#fdf3dc', '':'#f0ebe0' }
 
     const rows = sections.flatMap(s => {
       if (!s.items.length) return []
       return [
-        `<tr><td colspan="5" style="background:#f0ebe0;font-weight:700;font-size:.75rem;padding:.4rem .7rem;letter-spacing:.06em;text-transform:uppercase;color:#555">${s.label}</td></tr>`,
-        ...s.items.map(t => `
+        `<tr><td colspan="5" style="background:${secColors[s.cls]};font-weight:700;font-size:.75rem;padding:.4rem .7rem;letter-spacing:.06em;text-transform:uppercase;color:#555">${s.label}</td></tr>`,
+        ...s.items.map(t => {
+          const ev = estadoVenc(t)
+          const vencColor = ev==='vencida' ? '#c0392b' : ev==='hoy' ? '#b8860b' : t.vencimiento ? '#555' : '#999'
+          return `
           <tr>
             <td style="font-weight:600;font-size:.85rem">${t.titulo}</td>
             <td style="font-size:.75rem;color:#666">${t.causa ? getCNombre(t.causa) : '—'}</td>
             <td style="font-size:.75rem;font-weight:700">${critMap[t.criticidad]||'NORMAL'}</td>
             <td style="font-size:.75rem">${estadoMap[t.estado]||t.estado}</td>
-            <td style="font-size:.75rem;color:${t.vencimiento?'#c0392b':'#999'};font-weight:${t.vencimiento?'700':'400'}">${t.vencimiento?fmtF(t.vencimiento):'—'}</td>
+            <td style="font-size:.75rem;color:${vencColor};font-weight:${t.vencimiento?'700':'400'}">${t.vencimiento?`${fmtF(t.vencimiento)}${ev==='vencida'?' ⚠':''}${ev==='hoy'?' (HOY)':''}`:'—'}</td>
           </tr>
           ${t.notas?`<tr><td colspan="5" style="font-size:.72rem;color:#888;font-style:italic;padding:.1rem .7rem .4rem">↳ ${t.notas}</td></tr>`:''}
-        `)
+        `})
       ]
     })
 
@@ -112,7 +163,7 @@ export function Tareas({ store }) {
       </style>
       </head><body>
       <h1>I|A — Tareas Activas</h1>
-      <div class="sub">Generado el ${new Date().toLocaleDateString('es-AR', { weekday:'long', year:'numeric', month:'long', day:'numeric' }).toUpperCase()} · Total: ${activos.length} tareas</div>
+      <div class="sub">Generado el ${new Date().toLocaleDateString('es-AR', { weekday:'long', year:'numeric', month:'long', day:'numeric' }).toUpperCase()} · Total: ${activos.length} tareas${vencidas.length?` · ⚠ ${vencidas.length} VENCIDAS`:''}${hoy.length?` · ${hoy.length} VENCEN HOY`:''}</div>
       <table>
         <thead><tr><th>Tarea</th><th>Causa</th><th>Criticidad</th><th>Estado</th><th>Vencimiento</th></tr></thead>
         <tbody>${rows.join('')}</tbody>
@@ -126,42 +177,30 @@ export function Tareas({ store }) {
     setTimeout(() => win.print(), 400)
   }
 
-  const co = { urgente:0, alta:1, normal:2, baja:3 }
-  const byVenc = (a,b) => { if(!a.vencimiento&&!b.vencimiento)return 0; if(!a.vencimiento)return 1; if(!b.vencimiento)return -1; return a.vencimiento.localeCompare(b.vencimiento) }
-  const srt = arr => [...arr].sort((a,b)=>(co[a.criticidad]||2)-(co[b.criticidad]||2)||byVenc(a,b))
-
-  const activos    = srt(tareas.filter(t=>t.estado!=='completada'))
-  const archivados = [...tareas.filter(t=>t.estado==='completada')].reverse()
-
+  // ── Card de tarea ──
   const taskCard = (t) => {
     const critMap = { urgente:'🔴 URGENTE', alta:'🟠 ALTA', normal:'🟢 NORMAL', baja:'⚪ BAJA' }
     const estadoMap = { 'no-iniciada':'⬜ No Inic.', 'en-curso':'🔄 En Curso' }
+    const ev = estadoVenc(t)
+    const lv = labelVenc(t)
     return (
-      <div key={t.id} className={`task-strip ${t.criticidad||'normal'}`}>
-        <div className="task-main">
-          <div className="task-title">{t.titulo}</div>
-          <div className="task-meta">
-            {t.causa && <span className="tag">{getCNombre(t.causa)}</span>}
-            <span>{fmtF(t.fecha)}</span>
-            {t.vencimiento && <span className="task-vencimiento">Vence: {fmtF(t.vencimiento)}</span>}
-            {t.notas && <span className="task-notas">{t.notas.substring(0,55)}{t.notas.length>55?'…':''}</span>}
-          </div>
+      <div key={t.id} className={`tcard ${ev||''} crit-border-${t.criticidad||'normal'}`}>
+        {lv && <div className={`tcard-venc-badge venc-${ev}`}>{lv} · {fmtF(t.vencimiento)}</div>}
+        <div className="tcard-title">{t.titulo}</div>
+        <div className="tcard-meta">
+          {t.causa && <span className="tag">{getCNombre(t.causa)}</span>}
+          {t.notas && <span className="tcard-notas">{t.notas.substring(0,80)}{t.notas.length>80?'…':''}</span>}
         </div>
-        <div className="task-actions">
+        <div className="tcard-footer">
           <button className={`crit-btn crit-${t.criticidad||'normal'}`} onClick={()=>cycleCrit(t)}>{critMap[t.criticidad]||'NORMAL'}</button>
           <button className={`status-btn status-${t.estado||'no-iniciada'}`} onClick={()=>cycleEstado(t)}>{estadoMap[t.estado]||'No Inic.'}</button>
+          <span className="tcard-spacer" />
           <button className="btn btn-ghost btn-xs" onClick={()=>openModal(t.id)}>✏</button>
           <button className="btn btn-ghost btn-xs" onClick={()=>{if(confirm('¿Eliminar?'))deleteTarea(t.id)}}>🗑</button>
         </div>
       </div>
     )
   }
-
-  const sections = [
-    { label: '🔴 Urgentes',    items: activos.filter(t=>t.criticidad==='urgente') },
-    { label: '🔄 En curso',    items: activos.filter(t=>t.criticidad!=='urgente'&&t.estado==='en-curso') },
-    { label: '⬜ No iniciadas', items: activos.filter(t=>t.criticidad!=='urgente'&&t.estado==='no-iniciada') },
-  ]
 
   return (
     <div>
@@ -172,21 +211,35 @@ export function Tareas({ store }) {
           <button className="btn btn-primary" onClick={()=>openModal()}>＋ Nueva</button>
         </div>
       </div>
+
+      {/* ── Resumen de alertas ── */}
+      {tab === 'activas' && (vencidas.length > 0 || hoy.length > 0) && (
+        <div className="tareas-alertbar">
+          {vencidas.length > 0 && <span className="alert-chip chip-vencida">🔥 {vencidas.length} vencida{vencidas.length>1?'s':''}</span>}
+          {hoy.length > 0 && <span className="alert-chip chip-hoy">📅 {hoy.length} vence{hoy.length>1?'n':''} hoy</span>}
+          <span className="alert-chip chip-total">{activos.length} pendientes en total</span>
+        </div>
+      )}
+
       <div className="tabs">
         <div className={`tab ${tab==='activas'?'active':''}`} onClick={()=>setTab('activas')}>Activas / En Curso</div>
         <div className={`tab ${tab==='archivo'?'active':''}`} onClick={()=>setTab('archivo')}>Archivo</div>
       </div>
+
       {tab === 'activas' && (
-        <div className="task-list">
+        <div>
           {activos.length === 0 && <div className="empty-state"><div className="icon">🎉</div><p>¡Sin tareas pendientes!</p></div>}
           {sections.map(s => s.items.length > 0 && (
-            <div key={s.label}>
-              <div className="task-section-label">{s.label}</div>
-              {s.items.map(taskCard)}
+            <div key={s.key}>
+              <div className={`task-section-label ${s.cls}`}>{s.label} <span className="sec-count">({s.items.length})</span></div>
+              <div className="tcard-grid">
+                {s.items.map(taskCard)}
+              </div>
             </div>
           ))}
         </div>
       )}
+
       {tab === 'archivo' && (
         <div className="task-list">
           {archivados.length === 0 && <div className="empty-state"><div className="icon">📦</div><p>Archivo vacío</p></div>}
@@ -201,18 +254,19 @@ export function Tareas({ store }) {
           ))}
         </div>
       )}
+
       {modal && (
         <Modal title={editId?'Editar Tarea':'Nueva Tarea'} onClose={()=>setModal(false)}>
           <div className="form-row"><div className="form-group" style={{flex:2}}><label>Título *</label><input className="form-control" value={titulo} onChange={e=>setTitulo(e.target.value)} placeholder="Descripción de la tarea" /></div></div>
-          
+
           <div className="form-row">
             {/* --- CAMPO CAUSA CON AUTOCOMPLETE --- */}
             <div className="form-group" style={{ position: 'relative' }}>
               <label>Causa</label>
-              <input 
-                type="text" 
-                className="form-control" 
-                placeholder="🔍 Escriba para buscar..." 
+              <input
+                type="text"
+                className="form-control"
+                placeholder="🔍 Escriba para buscar..."
                 value={busqueda}
                 onChange={(e) => {
                   setBusqueda(e.target.value)
@@ -221,13 +275,13 @@ export function Tareas({ store }) {
                 }}
                 onFocus={() => setMostrarSug(true)}
               />
-              
+
               {mostrarSug && busqueda.length > 0 && (
                 <div className="autocomplete-list">
                   {causasFiltradas.length > 0 ? (
                     causasFiltradas.map(c => (
-                      <div 
-                        key={c.id} 
+                      <div
+                        key={c.id}
                         className="autocomplete-item"
                         onClick={() => {
                           setCausaId(c.id)
@@ -261,8 +315,136 @@ export function Tareas({ store }) {
         </Modal>
       )}
 
-      {/* --- ESTILOS LOCALES PARA EL AUTOCOMPLETE --- */}
+      {/* --- ESTILOS LOCALES: CARDS, ALERTAS Y AUTOCOMPLETE --- */}
       <style>{`
+        /* ── Barra de alertas ── */
+        .tareas-alertbar {
+          display: flex;
+          gap: .5rem;
+          flex-wrap: wrap;
+          margin-bottom: 1rem;
+        }
+        .alert-chip {
+          font-size: .72rem;
+          font-weight: 700;
+          letter-spacing: .04em;
+          padding: .35rem .8rem;
+          border-radius: 999px;
+          border: 1px solid transparent;
+        }
+        .chip-vencida {
+          background: rgba(224, 82, 82, .12);
+          border-color: rgba(224, 82, 82, .5);
+          color: #e05252;
+        }
+        .chip-hoy {
+          background: rgba(212, 168, 67, .12);
+          border-color: rgba(212, 168, 67, .5);
+          color: #d4a843;
+        }
+        .chip-total {
+          background: transparent;
+          border-color: rgba(255,255,255,.12);
+          color: var(--muted, #999);
+          font-weight: 500;
+        }
+
+        /* ── Etiquetas de sección ── */
+        .task-section-label.sec-vencida { color: #e05252; }
+        .task-section-label.sec-hoy { color: #d4a843; }
+        .sec-count { opacity: .55; font-weight: 400; }
+
+        /* ── Grilla de cards ── */
+        .tcard-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+          gap: .7rem;
+          margin-bottom: 1.4rem;
+        }
+        @media (max-width: 640px) {
+          .tcard-grid { grid-template-columns: 1fr; }
+        }
+
+        /* ── Card ── */
+        .tcard {
+          background: var(--card, rgba(255,255,255,.03));
+          border: 1px solid rgba(255,255,255,.09);
+          border-left-width: 3px;
+          border-radius: 8px;
+          padding: .8rem .9rem .7rem;
+          display: flex;
+          flex-direction: column;
+          gap: .45rem;
+          transition: border-color .15s, transform .1s;
+        }
+        .tcard:hover { transform: translateY(-1px); }
+
+        /* Borde izquierdo según criticidad (base) */
+        .tcard.crit-border-urgente { border-left-color: #e05252; }
+        .tcard.crit-border-alta    { border-left-color: #e8923a; }
+        .tcard.crit-border-normal  { border-left-color: #6fae6f; }
+        .tcard.crit-border-baja    { border-left-color: #888; }
+
+        /* Estados de vencimiento pisan la criticidad */
+        .tcard.vencida {
+          border-color: rgba(224, 82, 82, .55);
+          border-left-color: #e05252;
+          background: linear-gradient(rgba(224,82,82,.07), rgba(224,82,82,.03));
+        }
+        .tcard.hoy {
+          border-color: rgba(212, 168, 67, .55);
+          border-left-color: #d4a843;
+          background: linear-gradient(rgba(212,168,67,.08), rgba(212,168,67,.03));
+        }
+        .tcard.proxima { border-left-color: #d4a843; }
+
+        /* ── Badge de vencimiento ── */
+        .tcard-venc-badge {
+          font-size: .68rem;
+          font-weight: 700;
+          letter-spacing: .05em;
+          text-transform: uppercase;
+          align-self: flex-start;
+          padding: .18rem .55rem;
+          border-radius: 4px;
+        }
+        .venc-vencida { background: rgba(224,82,82,.18); color: #ff7b7b; }
+        .venc-hoy     { background: rgba(212,168,67,.2);  color: #ecc35e; animation: pulseHoy 1.6s ease-in-out infinite; }
+        .venc-proxima { background: rgba(212,168,67,.1);  color: #c9a94f; }
+        .venc-futura  { background: rgba(255,255,255,.06); color: var(--muted, #999); }
+
+        @keyframes pulseHoy {
+          0%, 100% { opacity: 1; }
+          50% { opacity: .55; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .venc-hoy { animation: none; }
+        }
+
+        .tcard-title {
+          font-weight: 600;
+          font-size: .9rem;
+          line-height: 1.3;
+        }
+        .tcard-meta {
+          display: flex;
+          flex-direction: column;
+          gap: .25rem;
+          font-size: .72rem;
+          color: var(--muted, #999);
+        }
+        .tcard-notas { font-style: italic; opacity: .85; }
+        .tcard-footer {
+          display: flex;
+          align-items: center;
+          gap: .4rem;
+          margin-top: auto;
+          padding-top: .3rem;
+          border-top: 1px solid rgba(255,255,255,.06);
+        }
+        .tcard-spacer { flex: 1; }
+
+        /* ── Autocomplete (sin cambios) ── */
         .autocomplete-list {
           position: absolute;
           top: 100%;
