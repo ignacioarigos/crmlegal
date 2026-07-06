@@ -250,6 +250,15 @@ tbody td.num { text-align: right; font-family: 'IBM Plex Mono', monospace; }
 .modal-close { background: none; border: none; font-size: 1.3rem; cursor: pointer; color: var(--muted); padding: .2rem .4rem; border-radius: 4px; }
 .modal-close:hover { background: var(--cream); }
 
+/* ── Tarjetas de causas (vista grilla) ── */
+.causa-grid-card {
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+.causa-grid-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(0,0,0,.18);
+}
+
 /* ── Empty ── */
 .empty-state { text-align: center; padding: 2.5rem 1.5rem; color: var(--muted); }
 .empty-state .icon { font-size: 2.5rem; margin-bottom: .75rem; opacity: .4; }
