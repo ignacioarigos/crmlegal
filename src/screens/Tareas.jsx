@@ -89,9 +89,11 @@ export function Tareas({ store }) {
     setSaving(false); setModal(false)
   }
 
-  const cycleEstado = async (t) => {
-    const o = ['no-iniciada','en-curso','completada']
-    const next = o[(o.indexOf(t.estado||'no-iniciada')+1)%3]
+  // ── Avance de estado: siempre la próxima acción ──
+  // no-iniciada → en-curso → completada (pasa al Archivo)
+  const avanzarEstado = async (t) => {
+    const actual = t.estado || 'no-iniciada'
+    const next = actual === 'no-iniciada' ? 'en-curso' : 'completada'
     await patchTarea(t.id, { estado: next })
   }
 
@@ -180,9 +182,9 @@ export function Tareas({ store }) {
   // ── Card de tarea ──
   const taskCard = (t) => {
     const critMap = { urgente:'🔴 URGENTE', alta:'🟠 ALTA', normal:'🟢 NORMAL', baja:'⚪ BAJA' }
-    const estadoMap = { 'no-iniciada':'⬜ No Inic.', 'en-curso':'🔄 En Curso' }
     const ev = estadoVenc(t)
     const lv = labelVenc(t)
+    const enCurso = t.estado === 'en-curso'
     return (
       <div key={t.id} className={`tcard ${ev||''} crit-border-${t.criticidad||'normal'}`}>
         {lv && <div className={`tcard-venc-badge venc-${ev}`}>{lv} · {fmtF(t.vencimiento)}</div>}
@@ -193,8 +195,15 @@ export function Tareas({ store }) {
         </div>
         <div className="tcard-footer">
           <button className={`crit-btn crit-${t.criticidad||'normal'}`} onClick={()=>cycleCrit(t)}>{critMap[t.criticidad]||'NORMAL'}</button>
-          <button className={`status-btn status-${t.estado||'no-iniciada'}`} onClick={()=>cycleEstado(t)}>{estadoMap[t.estado]||'No Inic.'}</button>
+          <span className={`estado-pill ${enCurso?'pill-curso':'pill-noinic'}`}>{enCurso?'🔄 En curso':'⬜ No inic.'}</span>
           <span className="tcard-spacer" />
+          <button
+            className={`btn-accion ${enCurso?'accion-concluir':'accion-iniciar'}`}
+            onClick={()=>avanzarEstado(t)}
+            title={enCurso?'Marcar como concluida (pasa al Archivo)':'Marcar como iniciada'}
+          >
+            {enCurso?'✓ Concluir':'▶ Iniciar'}
+          </button>
           <button className="btn btn-ghost btn-xs" onClick={()=>openModal(t.id)}>✏</button>
           <button className="btn btn-ghost btn-xs" onClick={()=>{if(confirm('¿Eliminar?'))deleteTarea(t.id)}}>🗑</button>
         </div>
@@ -247,7 +256,7 @@ export function Tareas({ store }) {
             <div key={t.id} className="archivo-strip">
               <span>✅</span>
               <div style={{flex:1}}><div className="task-title">{t.titulo}</div><div style={{fontSize:'.7rem',color:'var(--muted)',marginTop:'.15rem'}}>{t.causa?getCNombre(t.causa)+' · ':''}Completada</div></div>
-              <button className="btn btn-ghost btn-xs" onClick={()=>patchTarea(t.id,{estado:'en-curso'})}>↩</button>
+              <button className="btn-accion accion-reabrir" onClick={()=>patchTarea(t.id,{estado:'en-curso'})} title="Reabrir (vuelve a En curso)">↩ Reabrir</button>
               <button className="btn btn-ghost btn-xs" onClick={()=>openModal(t.id)}>✏</button>
               <button className="btn btn-ghost btn-xs" onClick={()=>{if(confirm('¿Eliminar?'))deleteTarea(t.id)}}>🗑</button>
             </div>
@@ -441,8 +450,67 @@ export function Tareas({ store }) {
           margin-top: auto;
           padding-top: .3rem;
           border-top: 1px solid rgba(255,255,255,.06);
+          flex-wrap: wrap;
         }
         .tcard-spacer { flex: 1; }
+
+        /* ── Pill de estado (solo lectura) ── */
+        .estado-pill {
+          font-size: .66rem;
+          font-weight: 600;
+          letter-spacing: .03em;
+          padding: .2rem .5rem;
+          border-radius: 999px;
+          white-space: nowrap;
+        }
+        .pill-noinic {
+          background: rgba(255,255,255,.05);
+          color: var(--muted, #999);
+        }
+        .pill-curso {
+          background: rgba(212,168,67,.14);
+          color: #d4a843;
+        }
+
+        /* ── Botón de acción de estado ── */
+        .btn-accion {
+          font-size: .7rem;
+          font-weight: 700;
+          letter-spacing: .04em;
+          padding: .3rem .7rem;
+          border-radius: 6px;
+          border: 1px solid;
+          background: transparent;
+          cursor: pointer;
+          white-space: nowrap;
+          transition: background .15s, transform .1s;
+          font-family: inherit;
+        }
+        .btn-accion:active { transform: scale(.97); }
+        .accion-iniciar {
+          border-color: rgba(255,255,255,.25);
+          color: var(--text, #ddd);
+        }
+        .accion-iniciar:hover {
+          background: rgba(255,255,255,.07);
+          border-color: rgba(255,255,255,.4);
+        }
+        .accion-concluir {
+          border-color: rgba(111,174,111,.55);
+          color: #8fce8f;
+        }
+        .accion-concluir:hover {
+          background: rgba(111,174,111,.14);
+          border-color: #6fae6f;
+        }
+        .accion-reabrir {
+          border-color: rgba(212,168,67,.45);
+          color: #d4a843;
+        }
+        .accion-reabrir:hover {
+          background: rgba(212,168,67,.12);
+          border-color: #d4a843;
+        }
 
         /* ── Autocomplete (sin cambios) ── */
         .autocomplete-list {
