@@ -10,6 +10,7 @@ const NAVS = [
   { id: 'registro',   icon: '📋', label: 'Registro' },
   { id: 'gastos',     icon: '💰', label: 'Gastos' },
   { id: 'causas',     icon: '📁', label: 'Causas',  badge: true },
+  { id: 'siniestros', icon: '🚗', label: 'Siniestros' },
   { id: 'cobros',     icon: '💵', label: 'Cobros' },
   { id: 'documentos', icon: '📄', label: 'Documentos' },
 ]
