@@ -4,6 +4,7 @@ import {
   saveSiniestro, deleteSiniestro,
   uploadDoc, getDocUrl, deleteDoc,
 } from '../lib/store.js'
+import { imprimirCaratula, imprimirFormulario } from '../lib/caratula.js'
 
 // ── Categorías de documentación (mapean al checklist del formulario) ──
 const DOC_CATS = [
@@ -221,7 +222,7 @@ export default function Siniestros({ store }) {
   const guardado = !!siniestros.find((s) => s.id === ficha.id)
   const cerrado = (ficha.estado || 'abierto') === 'cerrado'
   const ed = editing   // atajo
-
+  const docCats = docs.filter((d) => d.siniestro_id === ficha.id).map((d) => d.categoria)
   return (
     <div className="sin-wrap">
       <Style />
@@ -246,6 +247,12 @@ export default function Siniestros({ store }) {
       </div>
 
       {!ed && <div className="sin-readbar">Modo lectura · tocá <strong>Editar</strong> para modificar los datos</div>}
+      {guardado && (
+        <div style={{ display: 'flex', gap: '.5rem', justifyContent: 'center', marginBottom: '1.25rem' }}>
+          <button className="sin-btn ghost" onClick={() => imprimirCaratula(ficha)}>⬇ Carátula PDF</button>
+          <button className="sin-btn ghost" onClick={() => imprimirFormulario(ficha, docCats)}>⬇ Formulario PDF</button>
+        </div>
+      )}
 
       {/* Identificación */}
       <Section title="Identificación">
