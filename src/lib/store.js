@@ -5,6 +5,7 @@ import { DB, uid, dateFmt, TRAMITES_DEFAULT } from '../lib/supabase.js'
 let _state = {
   tareas: [], causas: [], registros: [], gastos: [],
   eventos: [], tramites: [], cobros: [],
+  siniestros: [], siniestro_docs: [],
   loaded: false,
 }
 let _listeners = []
@@ -45,6 +46,19 @@ export async function loadAll() {
   } else {
     _state.tramites = tr
   }
+
+  // Siniestros (guardado defensivo: no debe romper loadAll si falla)
+  try {
+    const [s, sd] = await Promise.all([
+      DB.get('crm_siniestros'), DB.get('crm_siniestro_docs'),
+    ])
+    _state.siniestros     = s  || []
+    _state.siniestro_docs = sd || []
+  } catch {
+    _state.siniestros     = _state.siniestros || []
+    _state.siniestro_docs = _state.siniestro_docs || []
+  }
+
   _state.loaded = true
   notify()
 }
@@ -195,5 +209,67 @@ export async function resetTramites() {
   for (const t of _state.tramites) try { await DB.delete('crm_tramites', t.id) } catch {}
   _state.tramites = []
   await seedTramites()
+  notify()
+}
+
+// ── Siniestros ────────────────────────────────────────────────
+const WORKER = 'https://crmproxy.ignacioarigos.workers.dev'
+
+export async function saveSiniestro(obj) {
+  const exists = _state.siniestros.find(x => x.id === obj.id)
+  if (exists) {
+    await DB.update('crm_siniestros', obj.id, obj)
+    _state.siniestros = _state.siniestros.map(x => x.id === obj.id ? obj : x)
+  } else {
+    if (obj.carpeta_nro == null) {
+      obj.carpeta_nro = _state.siniestros.reduce((m, s) => Math.max(m, s.carpeta_nro || 0), 0) + 1
+    }
+    await DB.insert('crm_siniestros', obj)
+    _state.siniestros = [..._state.siniestros, obj]
+  }
+  notify()
+  return obj
+}
+
+export async function deleteSiniestro(id) {
+  // borro los archivos del bucket primero (para no dejar huérfanos en Storage)
+  const docs = _state.siniestro_docs.filter(d => d.siniestro_id === id)
+  for (const d of docs) { try { await deleteDoc(d.id, d.storage_path) } catch {} }
+  await DB.delete('crm_siniestros', id)
+  _state.siniestros = _state.siniestros.filter(x => x.id !== id)
+  notify()
+}
+
+// ── Documentación (pasa por el Worker, NO por la anon key) ──────
+export async function uploadDoc(file, siniestroId, categoria) {
+  const fd = new FormData()
+  fd.append('file', file)
+  fd.append('siniestro_id', siniestroId)
+  fd.append('categoria', categoria)
+  const r = await fetch(`${WORKER}/siniestros/upload`, { method: 'POST', body: fd })
+  if (!r.ok) throw new Error(await r.text())
+  const row = await r.json()
+  _state.siniestro_docs = [..._state.siniestro_docs, row]
+  notify()
+  return row
+}
+
+export async function getDocUrl(storage_path) {
+  const r = await fetch(`${WORKER}/siniestros/signed-url`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ storage_path }),
+  })
+  const { url } = await r.json()
+  return url
+}
+
+export async function deleteDoc(id, storage_path) {
+  await fetch(`${WORKER}/siniestros/delete-doc`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id, storage_path }),
+  })
+  _state.siniestro_docs = _state.siniestro_docs.filter(d => d.id !== id)
   notify()
 }
