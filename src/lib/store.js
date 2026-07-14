@@ -5,7 +5,7 @@ import { DB, uid, dateFmt, TRAMITES_DEFAULT } from '../lib/supabase.js'
 let _state = {
   tareas: [], causas: [], registros: [], gastos: [],
   eventos: [], tramites: [], cobros: [],
-  siniestros: [], siniestro_docs: [],
+  siniestros: [], siniestro_docs: [], aseguradoras: [],
   loaded: false,
 }
 let _listeners = []
