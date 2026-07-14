@@ -248,9 +248,9 @@ export default function Siniestros({ store }) {
 
       {!ed && <div className="sin-readbar">Modo lectura · tocá <strong>Editar</strong> para modificar los datos</div>}
       {guardado && (
-        <div style={{ display: 'flex', gap: '.5rem', justifyContent: 'center', marginBottom: '1.25rem' }}>
-          <button className="sin-btn ghost" onClick={() => imprimirCaratula(ficha)}>⬇ Carátula PDF</button>
-          <button className="sin-btn ghost" onClick={() => imprimirFormulario(ficha, docCats)}>⬇ Formulario PDF</button>
+        <div style={{ display: 'flex', gap: '.6rem', justifyContent: 'center', marginBottom: '1.25rem' }}>
+          <button className="sin-btn pdf" onClick={() => imprimirCaratula(ficha)}>⬇ Carátula PDF</button>
+          <button className="sin-btn pdf" onClick={() => imprimirFormulario(ficha, docCats)}>⬇ Formulario PDF</button>
         </div>
       )}
 
@@ -425,6 +425,8 @@ function Style() {
     .sin-btn.primary { background:var(--g); color:#1c1811; border-color:var(--g); font-weight:600; }
     .sin-btn.primary:hover { background:var(--g-dim); }
     .sin-btn:disabled { opacity:.5; cursor:default; }
+    .sin-btn.pdf { border-color:var(--g); color:var(--g); background:rgba(201,162,75,.06); font-weight:600; }
+    .sin-btn.pdf:hover { background:var(--g); color:#1c1811; }
 
     .sin-toolbar { display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:1.25rem; flex-wrap:wrap; }
     .sin-chips { display:flex; gap:.5rem; }
