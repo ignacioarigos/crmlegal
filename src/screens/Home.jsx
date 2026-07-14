@@ -1,5 +1,4 @@
 import { fmtF } from '../lib/supabase.js'
-
 export default function Home({ navigate, store }) {
   const { tareas, causas, registros, cobros } = store
   const hoy = new Date().toDateString()
@@ -9,23 +8,21 @@ export default function Home({ navigate, store }) {
   const regHoy      = registros.filter(r => new Date(r.fecha).toDateString() === hoy).length
   const arsMonth    = cobros.filter(c => c.fecha?.startsWith(mes) && (!c.moneda || c.moneda === 'ARS')).reduce((s,c)=>s+(c.monto||0),0)
   const usdMonth    = cobros.filter(c => c.fecha?.startsWith(mes) && c.moneda === 'USD').reduce((s,c)=>s+(c.monto||0),0)
-
   const cards = [
     { id:'tareas',     c:'c1', icon:'✅', title:'Tareas',     desc:'Gestión con prioridad, estado y archivo' },
     { id:'registro',   c:'c2', icon:'📋', title:'Registro',   desc:'Novedades PJN · SCBA · EJE con plazos' },
     { id:'gastos',     c:'c3', icon:'💰', title:'Gastos',     desc:'Planilla de gastos por causa' },
     { id:'causas',     c:'c4', icon:'📁', title:'Causas',     desc:'Expedientes con movimientos y gastos' },
-    { id:'cobros',     c:'c5', icon:'💵', title:'Cobros',     desc:'Ingresos ARS y USD del estudio' },
-    { id:'documentos', c:'c6', icon:'📄', title:'Documentos', desc:'Generador con IA + Google Drive' },
+    { id:'siniestros', c:'c5', icon:'🚗', title:'Siniestros', desc:'Carpetas de siniestros con documentación' },
+    { id:'cobros',     c:'c6', icon:'💵', title:'Cobros',     desc:'Ingresos ARS y USD del estudio' },
+    { id:'documentos', c:'c1', icon:'📄', title:'Documentos', desc:'Generador con IA + Google Drive' },
   ]
-
   return (
     <div>
       <div className="home-hero">
         <h1>Bienvenido,<br /><em>Dr. Arigós</em></h1>
         <p>IGNACIO ARIGÓS — ABOGADO &nbsp;|&nbsp; TE: 1154737787</p>
       </div>
-
       <div className="home-grid">
         {cards.map(card => (
           <div key={card.id} className={`home-card ${card.c}`} onClick={() => navigate(card.id)}>
@@ -35,7 +32,6 @@ export default function Home({ navigate, store }) {
           </div>
         ))}
       </div>
-
       <div className="home-stats">
         <div className="stat-item"><div className="stat-num">{pendientes}</div><div className="stat-label">Pendientes</div></div>
         <div className="stat-item"><div className="stat-num">{urgentes}</div><div className="stat-label">Urgentes</div></div>
