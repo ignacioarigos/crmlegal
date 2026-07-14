@@ -10,6 +10,7 @@ import Causas from './screens/Causas.jsx'
 import CausaDetail from './screens/CausaDetail.jsx'
 import Cobros from './screens/Cobros.jsx'
 import Documentos from './screens/Documentos.jsx'
+import Siniestros from './screens/Siniestros.jsx'
 
 export default function App() {
   const [screen, setScreen] = useState('home')
@@ -132,6 +133,7 @@ export default function App() {
           {screen === 'causa-detail' && <CausaDetail id={causaDetailId} navigate={navigate} store={store} />}
           {screen === 'cobros'       && <Cobros store={store} />}
           {screen === 'documentos'   && <Documentos store={store} />}
+          {screen === 'siniestros'   && <Siniestros navigate={navigate} store={store} />}
         </main>
       </div>
     </>
