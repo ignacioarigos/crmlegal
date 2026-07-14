@@ -28,6 +28,12 @@ const fechaFmt = (s) => {
   return `${d}/${m}/${y}`
 }
 
+const montoFmt = (v) => {
+  if (v == null || v === '') return '—'
+  const n = Number(v)
+  return Number.isFinite(n) ? '$ ' + n.toLocaleString('es-AR') : '—'
+}
+
 const blank = () => ({
   id: uid(),
   carpeta_nro: null,
@@ -44,21 +50,41 @@ const blank = () => ({
   fecha_pago: '', monto_pago: '',
 })
 
-// ── Sub-componentes chicos ──
-function SiNo({ value, onChange }) {
-  return (
-    <div className="sin-sino">
-      <button type="button" className={value ? 'on' : ''} onClick={() => onChange(true)}>Sí</button>
-      <button type="button" className={!value ? 'on' : ''} onClick={() => onChange(false)}>No</button>
-    </div>
-  )
-}
-
-function Field({ label, children, wide }) {
+// ── Campos (leen/editan según `editing`) ──
+function Txt({ label, value, onChange, editing, type = 'text', wide, placeholder }) {
+  const shown = type === 'date' ? fechaFmt(value) : (value || '—')
   return (
     <label className={'sin-field' + (wide ? ' wide' : '')}>
       <span>{label}</span>
-      {children}
+      {editing
+        ? <input type={type} value={value ?? ''} placeholder={placeholder}
+            onChange={(e) => onChange(e.target.value)} />
+        : <div className="sin-ro">{shown}</div>}
+    </label>
+  )
+}
+
+function Area({ label, value, onChange, editing }) {
+  return (
+    <label className="sin-field wide">
+      <span>{label}</span>
+      {editing
+        ? <textarea rows={3} value={value ?? ''} onChange={(e) => onChange(e.target.value)} />
+        : <div className="sin-ro multi">{value || '—'}</div>}
+    </label>
+  )
+}
+
+function Bool({ label, value, onChange, editing }) {
+  return (
+    <label className="sin-field">
+      <span>{label}</span>
+      {editing
+        ? <div className="sin-sino">
+            <button type="button" className={value ? 'on' : ''} onClick={() => onChange(true)}>Sí</button>
+            <button type="button" className={!value ? 'on' : ''} onClick={() => onChange(false)}>No</button>
+          </div>
+        : <div className="sin-ro">{value ? 'Sí' : 'No'}</div>}
     </label>
   )
 }
@@ -70,22 +96,29 @@ export default function Siniestros({ store }) {
 
   const [view, setView] = useState('list')       // 'list' | 'ficha'
   const [ficha, setFicha] = useState(null)
+  const [editing, setEditing] = useState(false)
+  const [snapshot, setSnapshot] = useState(null)  // backup para Cancelar
   const [saving, setSaving] = useState(false)
 
   // filtros de lista
-  const [estadoFilter, setEstadoFilter] = useState('abierto')  // 'todos' | 'abierto' | 'cerrado'
+  const [estadoFilter, setEstadoFilter] = useState('abierto')
   const [q, setQ] = useState('')
 
   const set = (k, v) => setFicha((f) => ({ ...f, [k]: v }))
 
-  const abrirNuevo = () => { setFicha(blank()); setView('ficha') }
-  const abrirExistente = (s) => { setFicha({ ...s }); setView('ficha') }
-  const volver = () => { setView('list'); setFicha(null) }
+  const abrirNuevo = () => { setFicha(blank()); setEditing(true); setView('ficha') }
+  const abrirExistente = (s) => { setFicha({ ...s }); setEditing(false); setView('ficha') }
+  const volver = () => { setView('list'); setFicha(null); setEditing(false) }
+
+  const entrarEdicion = () => { setSnapshot({ ...ficha }); setEditing(true) }
+  const cancelarEdicion = () => {
+    if (snapshot) { setFicha(snapshot); setEditing(false); setSnapshot(null) }
+    else volver()   // era uno nuevo sin guardar
+  }
 
   const guardar = async () => {
     setSaving(true)
     try {
-      // '' → null (evita errores de tipo en columnas date/time/numeric)
       const clean = Object.fromEntries(
         Object.entries(ficha).map(([k, v]) => [k, v === '' ? null : v])
       )
@@ -95,6 +128,8 @@ export default function Siniestros({ store }) {
       }
       const saved = await saveSiniestro(clean)
       setFicha((f) => ({ ...f, carpeta_nro: saved.carpeta_nro }))
+      setEditing(false)
+      setSnapshot(null)
     } catch (e) {
       alert('Error al guardar: ' + (e.message || e))
     } finally {
@@ -185,6 +220,7 @@ export default function Siniestros({ store }) {
   // ── FICHA ──────────────────────────────────────────────────
   const guardado = !!siniestros.find((s) => s.id === ficha.id)
   const cerrado = (ficha.estado || 'abierto') === 'cerrado'
+  const ed = editing   // atajo
 
   return (
     <div className="sin-wrap">
@@ -195,89 +231,96 @@ export default function Siniestros({ store }) {
           <span className="sin-carpeta big">CARPETA {carpetaFmt(ficha.carpeta_nro)}</span>
           {ficha.req_nombre && <span className="sub">{ficha.req_nombre}</span>}
         </div>
-        <button className="sin-btn primary" onClick={guardar} disabled={saving}>
-          {saving ? 'Guardando…' : 'Guardar'}
-        </button>
+        <div className="sin-ficha-actions">
+          {ed ? (
+            <>
+              <button className="sin-btn ghost" onClick={cancelarEdicion} disabled={saving}>Cancelar</button>
+              <button className="sin-btn primary" onClick={guardar} disabled={saving}>
+                {saving ? 'Guardando…' : 'Guardar'}
+              </button>
+            </>
+          ) : (
+            <button className="sin-btn primary" onClick={entrarEdicion}>Editar</button>
+          )}
+        </div>
       </div>
 
-      {/* Cabecera */}
+      {!ed && <div className="sin-readbar">Modo lectura · tocá <strong>Editar</strong> para modificar los datos</div>}
+
+      {/* Identificación */}
       <Section title="Identificación">
-        <Field label="Nº de siniestro"><input value={ficha.nro_siniestro || ''} onChange={(e) => set('nro_siniestro', e.target.value)} /></Field>
-        <Field label="Compañía"><input value={ficha.compania || ''} onChange={(e) => set('compania', e.target.value)} /></Field>
-        <Field label="Causa vinculada">
-          <select value={ficha.causa_id || ''} onChange={(e) => set('causa_id', e.target.value || null)}>
-            <option value="">— Sin vincular —</option>
-            {(store.causas || []).map((c) => (
-              <option key={c.id} value={c.id}>{c.caratula || c.cliente || c.id}</option>
-            ))}
-          </select>
-        </Field>
+        <Txt label="Nº de siniestro" value={ficha.nro_siniestro} onChange={(v) => set('nro_siniestro', v)} editing={ed} />
+        <Txt label="Compañía" value={ficha.compania} onChange={(v) => set('compania', v)} editing={ed} />
       </Section>
 
       {/* Requirente */}
       <Section title="Requirente (cliente)">
-        <Field label="Nombre" wide><input value={ficha.req_nombre || ''} onChange={(e) => set('req_nombre', e.target.value)} /></Field>
-        <Field label="DNI"><input value={ficha.req_dni || ''} onChange={(e) => set('req_dni', e.target.value)} /></Field>
-        <Field label="Teléfono"><input value={ficha.req_telefono || ''} onChange={(e) => set('req_telefono', e.target.value)} /></Field>
+        <Txt label="Nombre" wide value={ficha.req_nombre} onChange={(v) => set('req_nombre', v)} editing={ed} />
+        <Txt label="DNI" value={ficha.req_dni} onChange={(v) => set('req_dni', v)} editing={ed} />
+        <Txt label="Teléfono" value={ficha.req_telefono} onChange={(v) => set('req_telefono', v)} editing={ed} />
       </Section>
 
       {/* Hecho */}
       <Section title="Detalle del hecho">
-        <Field label="Fecha"><input type="date" value={ficha.fecha_hecho || ''} onChange={(e) => set('fecha_hecho', e.target.value)} /></Field>
-        <Field label="Hora"><input type="time" value={ficha.hora_hecho || ''} onChange={(e) => set('hora_hecho', e.target.value)} /></Field>
-        <Field label="Lugar" wide><input value={ficha.lugar || ''} onChange={(e) => set('lugar', e.target.value)} /></Field>
-        <Field label="¿Lesiones?"><SiNo value={ficha.lesiones} onChange={(v) => set('lesiones', v)} /></Field>
-        <Field label="¿Comprobantes médicos?"><SiNo value={ficha.comprobantes_medicos} onChange={(v) => set('comprobantes_medicos', v)} /></Field>
-        <Field label="¿Denuncia administrativa?"><SiNo value={ficha.denuncia_admin} onChange={(v) => set('denuncia_admin', v)} /></Field>
-        <Field label="Aseguradora" wide><input value={ficha.aseguradora || ''} onChange={(e) => set('aseguradora', e.target.value)} /></Field>
-        <Field label="Tel. aseguradora"><input value={ficha.aseg_telefono || ''} onChange={(e) => set('aseg_telefono', e.target.value)} /></Field>
-        <Field label="Contacto aseguradora"><input value={ficha.aseg_contacto || ''} onChange={(e) => set('aseg_contacto', e.target.value)} /></Field>
-        <Field label="Domicilio aseguradora" wide><input value={ficha.aseg_domicilio || ''} onChange={(e) => set('aseg_domicilio', e.target.value)} /></Field>
-        <Field label="Mail aseguradora"><input value={ficha.aseg_mail || ''} onChange={(e) => set('aseg_mail', e.target.value)} /></Field>
+        <Txt label="Fecha" type="date" value={ficha.fecha_hecho} onChange={(v) => set('fecha_hecho', v)} editing={ed} />
+        <Txt label="Hora" type="time" value={ficha.hora_hecho} onChange={(v) => set('hora_hecho', v)} editing={ed} />
+        <Txt label="Lugar" wide value={ficha.lugar} onChange={(v) => set('lugar', v)} editing={ed} />
+        <Bool label="¿Lesiones?" value={ficha.lesiones} onChange={(v) => set('lesiones', v)} editing={ed} />
+        <Bool label="¿Comprobantes médicos?" value={ficha.comprobantes_medicos} onChange={(v) => set('comprobantes_medicos', v)} editing={ed} />
+        <Bool label="¿Denuncia administrativa?" value={ficha.denuncia_admin} onChange={(v) => set('denuncia_admin', v)} editing={ed} />
+        <Txt label="Aseguradora" wide value={ficha.aseguradora} onChange={(v) => set('aseguradora', v)} editing={ed} />
+        <Txt label="Tel. aseguradora" value={ficha.aseg_telefono} onChange={(v) => set('aseg_telefono', v)} editing={ed} />
+        <Txt label="Contacto aseguradora" value={ficha.aseg_contacto} onChange={(v) => set('aseg_contacto', v)} editing={ed} />
+        <Txt label="Domicilio aseguradora" wide value={ficha.aseg_domicilio} onChange={(v) => set('aseg_domicilio', v)} editing={ed} />
+        <Txt label="Mail aseguradora" value={ficha.aseg_mail} onChange={(v) => set('aseg_mail', v)} editing={ed} />
       </Section>
 
       {/* Requerido */}
       <Section title="Requerido (contraparte)">
-        <Field label="Nombre" wide><input value={ficha.rdo_nombre || ''} onChange={(e) => set('rdo_nombre', e.target.value)} /></Field>
-        <Field label="Vehículo"><input value={ficha.rdo_vehiculo || ''} onChange={(e) => set('rdo_vehiculo', e.target.value)} /></Field>
-        <Field label="Dominio"><input value={ficha.rdo_dominio || ''} onChange={(e) => set('rdo_dominio', e.target.value)} /></Field>
-        <Field label="DNI"><input value={ficha.rdo_dni || ''} onChange={(e) => set('rdo_dni', e.target.value)} /></Field>
-        <Field label="Póliza"><input value={ficha.rdo_poliza || ''} onChange={(e) => set('rdo_poliza', e.target.value)} /></Field>
-        <Field label="Teléfono"><input value={ficha.rdo_telefono || ''} onChange={(e) => set('rdo_telefono', e.target.value)} /></Field>
-        <Field label="Domicilio" wide><input value={ficha.rdo_domicilio || ''} onChange={(e) => set('rdo_domicilio', e.target.value)} /></Field>
+        <Txt label="Nombre" wide value={ficha.rdo_nombre} onChange={(v) => set('rdo_nombre', v)} editing={ed} />
+        <Txt label="Vehículo" value={ficha.rdo_vehiculo} onChange={(v) => set('rdo_vehiculo', v)} editing={ed} />
+        <Txt label="Dominio" value={ficha.rdo_dominio} onChange={(v) => set('rdo_dominio', v)} editing={ed} />
+        <Txt label="DNI" value={ficha.rdo_dni} onChange={(v) => set('rdo_dni', v)} editing={ed} />
+        <Txt label="Póliza" value={ficha.rdo_poliza} onChange={(v) => set('rdo_poliza', v)} editing={ed} />
+        <Txt label="Teléfono" value={ficha.rdo_telefono} onChange={(v) => set('rdo_telefono', v)} editing={ed} />
+        <Txt label="Domicilio" wide value={ficha.rdo_domicilio} onChange={(v) => set('rdo_domicilio', v)} editing={ed} />
       </Section>
 
       {/* Mediación */}
       <Section title="Mediación">
-        <Field label="¿Mediación?"><SiNo value={ficha.mediacion} onChange={(v) => set('mediacion', v)} /></Field>
-        <Field label="Fecha"><input type="date" value={ficha.mediacion_fecha || ''} onChange={(e) => set('mediacion_fecha', e.target.value)} /></Field>
+        <Bool label="¿Mediación?" value={ficha.mediacion} onChange={(v) => set('mediacion', v)} editing={ed} />
+        <Txt label="Fecha" type="date" value={ficha.mediacion_fecha} onChange={(v) => set('mediacion_fecha', v)} editing={ed} />
       </Section>
 
       {/* Descripciones */}
       <Section title="Descripciones">
-        <Field label="Lesiones" wide><textarea rows={3} value={ficha.lesiones_detalle || ''} onChange={(e) => set('lesiones_detalle', e.target.value)} /></Field>
-        <Field label="Daños" wide><textarea rows={3} value={ficha.danos_detalle || ''} onChange={(e) => set('danos_detalle', e.target.value)} /></Field>
+        <Area label="Lesiones" value={ficha.lesiones_detalle} onChange={(v) => set('lesiones_detalle', v)} editing={ed} />
+        <Area label="Daños" value={ficha.danos_detalle} onChange={(v) => set('danos_detalle', v)} editing={ed} />
       </Section>
 
       {/* Vista médica */}
       <Section title="Vista médica">
-        <Field label="¿Vista médica?"><SiNo value={ficha.vista_medica} onChange={(v) => set('vista_medica', v)} /></Field>
-        <Field label="Fecha"><input type="date" value={ficha.vm_fecha || ''} onChange={(e) => set('vm_fecha', e.target.value)} /></Field>
-        <Field label="Dr."><input value={ficha.vm_dr || ''} onChange={(e) => set('vm_dr', e.target.value)} /></Field>
-        <Field label="Teléfono"><input value={ficha.vm_telefono || ''} onChange={(e) => set('vm_telefono', e.target.value)} /></Field>
-        <Field label="Domicilio" wide><input value={ficha.vm_domicilio || ''} onChange={(e) => set('vm_domicilio', e.target.value)} /></Field>
+        <Bool label="¿Vista médica?" value={ficha.vista_medica} onChange={(v) => set('vista_medica', v)} editing={ed} />
+        <Txt label="Fecha" type="date" value={ficha.vm_fecha} onChange={(v) => set('vm_fecha', v)} editing={ed} />
+        <Txt label="Dr." value={ficha.vm_dr} onChange={(v) => set('vm_dr', v)} editing={ed} />
+        <Txt label="Teléfono" value={ficha.vm_telefono} onChange={(v) => set('vm_telefono', v)} editing={ed} />
+        <Txt label="Domicilio" wide value={ficha.vm_domicilio} onChange={(v) => set('vm_domicilio', v)} editing={ed} />
       </Section>
 
       {/* Cierre */}
       <Section title="Cierre">
-        <Field label="¿Cerrado?"><SiNo value={cerrado} onChange={(v) => set('estado', v ? 'cerrado' : 'abierto')} /></Field>
+        <Bool label="¿Cerrado?" value={cerrado} onChange={(v) => set('estado', v ? 'cerrado' : 'abierto')} editing={ed} />
         {cerrado && <>
-          <Field label="Fecha de pago"><input type="date" value={ficha.fecha_pago || ''} onChange={(e) => set('fecha_pago', e.target.value)} /></Field>
-          <Field label="Monto"><input type="number" step="0.01" value={ficha.monto_pago ?? ''} onChange={(e) => set('monto_pago', e.target.value)} /></Field>
+          <Txt label="Fecha de pago" type="date" value={ficha.fecha_pago} onChange={(v) => set('fecha_pago', v)} editing={ed} />
+          {ed
+            ? <label className="sin-field"><span>Monto</span>
+                <input type="number" step="0.01" value={ficha.monto_pago ?? ''} onChange={(e) => set('monto_pago', e.target.value)} />
+              </label>
+            : <label className="sin-field"><span>Monto</span><div className="sin-ro">{montoFmt(ficha.monto_pago)}</div></label>}
         </>}
       </Section>
 
-      {/* Documentación */}
+      {/* Documentación (siempre activa, aun en modo lectura) */}
       <div className="sin-section">
         <h3>Documentación</h3>
         {!guardado ? (
@@ -354,84 +397,110 @@ function Section({ title, children }) {
   )
 }
 
-// ── Estilos (scoped, estética dark-gold) ──
+// ── Estilos (scoped, paleta propia con buen contraste) ──
 function Style() {
   return (
     <style>{`
-    .sin-wrap { padding: 1.25rem 1.5rem 4rem; font-family: 'IBM Plex Mono', monospace; color: var(--text, #e8e4da); }
+    .sin-wrap {
+      --g:#c9a24b; --g-dim:#a9853a;
+      --panel:#24201a; --input:#322d23; --input-b:#4a4234;
+      --txt:#f0ece2; --muted:#a49a88; --ro:#e6e1d6;
+      --line:#39332a; --danger:#c9603f;
+      padding:1.25rem 1.5rem 4rem; font-family:'IBM Plex Mono', monospace; color:var(--txt);
+      max-width:960px; margin:0 auto;
+    }
     .sin-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:1.25rem; }
-    .sin-head h1, .sin-section h3 { font-family:'Fraunces', serif; }
-    .sin-head h1 { font-size:1.6rem; margin:0; color: var(--gold, #c9a24b); }
+    .sin-head h1 { font-family:'Fraunces', serif; font-size:1.7rem; margin:0; color:var(--g); }
 
-    .sin-btn { border:1px solid var(--border,#3a3730); background:transparent; color:var(--text,#e8e4da);
-      padding:.5rem .9rem; border-radius:8px; cursor:pointer; font-family:inherit; font-size:.82rem; }
-    .sin-btn.primary { background:var(--gold,#c9a24b); color:#1a1712; border-color:var(--gold,#c9a24b); font-weight:600; }
-    .sin-btn.ghost:hover, .sin-btn:hover { border-color:var(--gold,#c9a24b); }
+    .sin-btn { border:1px solid var(--input-b); background:transparent; color:var(--txt);
+      padding:.55rem 1rem; border-radius:8px; cursor:pointer; font-family:inherit; font-size:.82rem; transition:all .15s; }
+    .sin-btn:hover { border-color:var(--g); }
+    .sin-btn.primary { background:var(--g); color:#1c1811; border-color:var(--g); font-weight:600; }
+    .sin-btn.primary:hover { background:var(--g-dim); }
     .sin-btn:disabled { opacity:.5; cursor:default; }
 
     .sin-toolbar { display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:1.25rem; flex-wrap:wrap; }
     .sin-chips { display:flex; gap:.5rem; }
-    .sin-chip { border:1px solid var(--border,#3a3730); background:transparent; color:var(--muted,#9a948a);
-      padding:.35rem .75rem; border-radius:20px; cursor:pointer; font-family:inherit; font-size:.78rem; }
-    .sin-chip.on { border-color:var(--gold,#c9a24b); color:var(--gold,#c9a24b); }
-    .sin-chip em { font-style:normal; opacity:.6; margin-left:.25rem; }
-    .sin-search { flex:1; min-width:220px; background:var(--panel,#211e18); border:1px solid var(--border,#3a3730);
-      color:var(--text,#e8e4da); padding:.5rem .75rem; border-radius:8px; font-family:inherit; font-size:.82rem; }
+    .sin-chip { border:1px solid var(--input-b); background:transparent; color:var(--muted);
+      padding:.4rem .85rem; border-radius:20px; cursor:pointer; font-family:inherit; font-size:.78rem; transition:all .15s; }
+    .sin-chip:hover { color:var(--txt); }
+    .sin-chip.on { border-color:var(--g); color:var(--g); background:rgba(201,162,75,.08); }
+    .sin-chip em { font-style:normal; opacity:.55; margin-left:.3rem; }
+    .sin-search { flex:1; min-width:240px; background:var(--input); border:1px solid var(--input-b);
+      color:var(--txt); padding:.55rem .8rem; border-radius:8px; font-family:inherit; font-size:.82rem; }
+    .sin-search::placeholder { color:var(--muted); }
+    .sin-search:focus { outline:none; border-color:var(--g); box-shadow:0 0 0 3px rgba(201,162,75,.15); }
 
+    /* Cards de lista */
     .sin-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:1rem; }
-    .sin-card { background:var(--panel,#211e18); border:1px solid var(--border,#3a3730); border-left:3px solid var(--gold,#c9a24b);
-      border-radius:10px; padding:1rem; cursor:pointer; transition:border-color .15s; }
-    .sin-card:hover { border-color:var(--gold,#c9a24b); }
-    .sin-card.cerrado { opacity:.6; border-left-color:var(--muted,#9a948a); }
+    .sin-card { background:var(--panel); border:1px solid var(--line); border-left:3px solid var(--g);
+      border-radius:10px; padding:1rem 1.1rem; cursor:pointer; transition:border-color .15s, transform .15s; }
+    .sin-card:hover { border-color:var(--g); transform:translateY(-2px); }
+    .sin-card.cerrado { opacity:.55; border-left-color:var(--muted); }
     .sin-card-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:.5rem; }
-    .sin-carpeta { font-size:.8rem; letter-spacing:.05em; color:var(--gold,#c9a24b); font-weight:600; }
-    .sin-carpeta.big { font-size:1.05rem; }
-    .sin-estado { font-size:.62rem; padding:.15rem .4rem; border-radius:4px; letter-spacing:.08em; }
-    .sin-estado.a { background:rgba(201,162,75,.15); color:var(--gold,#c9a24b); }
-    .sin-estado.c { background:rgba(154,148,138,.15); color:var(--muted,#9a948a); }
-    .sin-card-cliente { font-size:.95rem; margin-bottom:.4rem; }
-    .sin-card-meta { display:flex; flex-direction:column; gap:.15rem; font-size:.72rem; color:var(--muted,#9a948a); }
-    .sin-card-foot { display:flex; justify-content:space-between; align-items:center; margin-top:.75rem; }
-    .sin-docs-badge { font-size:.68rem; color:var(--muted,#9a948a); }
-    .sin-del { background:none; border:none; color:var(--urgent,#c0553f); font-size:.68rem; cursor:pointer; font-family:inherit; }
+    .sin-carpeta { font-size:.8rem; letter-spacing:.05em; color:var(--g); font-weight:600; }
+    .sin-carpeta.big { font-size:1.1rem; }
+    .sin-estado { font-size:.62rem; padding:.2rem .45rem; border-radius:4px; letter-spacing:.08em; }
+    .sin-estado.a { background:rgba(201,162,75,.16); color:var(--g); }
+    .sin-estado.c { background:rgba(164,154,136,.16); color:var(--muted); }
+    .sin-card-cliente { font-size:.98rem; margin-bottom:.45rem; }
+    .sin-card-meta { display:flex; flex-direction:column; gap:.18rem; font-size:.72rem; color:var(--muted); }
+    .sin-card-foot { display:flex; justify-content:space-between; align-items:center; margin-top:.8rem; }
+    .sin-docs-badge { font-size:.68rem; color:var(--muted); }
+    .sin-del { background:none; border:none; color:var(--danger); font-size:.68rem; cursor:pointer; font-family:inherit; }
     .sin-del:hover { text-decoration:underline; }
-    .sin-empty { color:var(--muted,#9a948a); padding:2rem 0; text-align:center; }
+    .sin-empty { color:var(--muted); padding:2.5rem 0; text-align:center; }
 
     /* Ficha */
-    .sin-ficha-head { display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:1.5rem;
-      position:sticky; top:0; background:var(--bg,#1a1712); padding:.5rem 0; z-index:5; }
-    .sin-ficha-title { text-align:center; display:flex; flex-direction:column; }
-    .sin-ficha-title .sub { font-size:.75rem; color:var(--muted,#9a948a); }
-    .sin-section { margin-bottom:1.5rem; border:1px solid var(--border,#3a3730); border-radius:10px; padding:1rem 1.1rem; background:var(--panel,#211e18); }
-    .sin-section h3 { margin:0 0 .9rem; font-size:1rem; color:var(--gold,#c9a24b); }
-    .sin-grid-fields { display:grid; grid-template-columns:repeat(2,1fr); gap:.75rem 1rem; }
-    .sin-field { display:flex; flex-direction:column; gap:.3rem; font-size:.72rem; color:var(--muted,#9a948a); }
-    .sin-field.wide { grid-column:1 / -1; }
-    .sin-field input, .sin-field select, .sin-field textarea {
-      background:var(--bg,#1a1712); border:1px solid var(--border,#3a3730); color:var(--text,#e8e4da);
-      padding:.45rem .6rem; border-radius:6px; font-family:inherit; font-size:.85rem; }
-    .sin-field textarea { resize:vertical; }
+    .sin-ficha-head { display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:1rem;
+      position:sticky; top:0; background:rgba(26,23,18,.96); backdrop-filter:blur(4px); padding:.6rem 0; z-index:5; }
+    .sin-ficha-title { text-align:center; display:flex; flex-direction:column; gap:.15rem; }
+    .sin-ficha-title .sub { font-size:.75rem; color:var(--muted); }
+    .sin-ficha-actions { display:flex; gap:.5rem; }
+    .sin-readbar { font-size:.72rem; color:var(--muted); background:var(--panel); border:1px solid var(--line);
+      border-radius:8px; padding:.5rem .8rem; margin-bottom:1.25rem; text-align:center; }
+    .sin-readbar strong { color:var(--g); font-weight:600; }
 
-    .sin-sino { display:inline-flex; border:1px solid var(--border,#3a3730); border-radius:6px; overflow:hidden; width:fit-content; }
-    .sin-sino button { background:transparent; border:none; color:var(--muted,#9a948a); padding:.4rem .9rem; cursor:pointer; font-family:inherit; font-size:.8rem; }
-    .sin-sino button.on { background:var(--gold,#c9a24b); color:#1a1712; font-weight:600; }
+    .sin-section { margin-bottom:1.1rem; border:1px solid var(--line); border-radius:12px; padding:1.1rem 1.2rem; background:var(--panel); }
+    .sin-section h3 { margin:0 0 1rem; font-size:.9rem; color:var(--g); font-family:'Fraunces', serif;
+      text-transform:uppercase; letter-spacing:.06em; padding-bottom:.55rem; border-bottom:1px solid var(--line); }
+    .sin-grid-fields { display:grid; grid-template-columns:repeat(2,1fr); gap:.9rem 1.1rem; }
+
+    .sin-field { display:flex; flex-direction:column; gap:.35rem; font-size:.7rem; }
+    .sin-field.wide { grid-column:1 / -1; }
+    .sin-field > span { color:var(--muted); text-transform:uppercase; letter-spacing:.05em; font-size:.66rem; }
+    .sin-field input, .sin-field textarea {
+      background:var(--input); border:1px solid var(--input-b); color:var(--txt);
+      padding:.55rem .7rem; border-radius:8px; font-family:inherit; font-size:.9rem; transition:border-color .15s, box-shadow .15s; }
+    .sin-field input:focus, .sin-field textarea:focus {
+      outline:none; border-color:var(--g); box-shadow:0 0 0 3px rgba(201,162,75,.15); }
+    .sin-field textarea { resize:vertical; line-height:1.5; }
+
+    /* Valor en modo lectura */
+    .sin-ro { color:var(--ro); font-size:.9rem; padding:.5rem .1rem; min-height:1.2rem;
+      border-bottom:1px solid var(--line); }
+    .sin-ro.multi { white-space:pre-wrap; line-height:1.5; }
+
+    .sin-sino { display:inline-flex; border:1px solid var(--input-b); border-radius:8px; overflow:hidden; width:fit-content; }
+    .sin-sino button { background:var(--input); border:none; color:var(--muted); padding:.45rem 1.1rem; cursor:pointer; font-family:inherit; font-size:.82rem; }
+    .sin-sino button.on { background:var(--g); color:#1c1811; font-weight:600; }
 
     /* Documentación */
-    .sin-doc-note { color:var(--muted,#9a948a); font-size:.8rem; }
-    .sin-docs { display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:.75rem; }
-    .sin-slot { border:1px dashed var(--border,#3a3730); border-radius:8px; padding:.6rem .7rem; }
-    .sin-slot.filled { border-style:solid; border-color:rgba(120,180,120,.5); }
-    .sin-slot-head { display:flex; align-items:center; gap:.4rem; margin-bottom:.4rem; }
-    .sin-slot-head .dot { width:8px; height:8px; border-radius:50%; background:var(--border,#3a3730); }
+    .sin-doc-note { color:var(--muted); font-size:.82rem; }
+    .sin-docs { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:.8rem; }
+    .sin-slot { border:1px dashed var(--input-b); border-radius:10px; padding:.7rem .8rem; background:var(--input); transition:border-color .15s; }
+    .sin-slot.filled { border-style:solid; border-color:rgba(120,180,120,.55); background:rgba(120,180,120,.06); }
+    .sin-slot-head { display:flex; align-items:center; gap:.45rem; margin-bottom:.5rem; }
+    .sin-slot-head .dot { width:9px; height:9px; border-radius:50%; background:var(--input-b); }
     .sin-slot.filled .sin-slot-head .dot { background:#6db36d; }
-    .sin-slot-head .lbl { font-size:.78rem; color:var(--text,#e8e4da); }
-    .sin-slot-file { display:flex; align-items:center; justify-content:space-between; gap:.4rem; margin-bottom:.3rem; }
-    .sin-slot-file .link { background:none; border:none; color:var(--gold,#c9a24b); font-size:.7rem; cursor:pointer;
-      font-family:inherit; text-align:left; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:130px; }
+    .sin-slot-head .lbl { font-size:.8rem; color:var(--txt); }
+    .sin-slot-file { display:flex; align-items:center; justify-content:space-between; gap:.4rem; margin-bottom:.35rem; }
+    .sin-slot-file .link { background:none; border:none; color:var(--g); font-size:.72rem; cursor:pointer;
+      font-family:inherit; text-align:left; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:135px; }
     .sin-slot-file .link:hover { text-decoration:underline; }
-    .sin-slot-file .x { background:none; border:none; color:var(--urgent,#c0553f); cursor:pointer; font-size:.7rem; }
-    .sin-slot-up { display:inline-block; font-size:.72rem; color:var(--muted,#9a948a); cursor:pointer; padding:.2rem 0; }
-    .sin-slot-up:hover { color:var(--gold,#c9a24b); }
+    .sin-slot-file .x { background:none; border:none; color:var(--danger); cursor:pointer; font-size:.72rem; }
+    .sin-slot-up { display:inline-block; font-size:.74rem; color:var(--muted); cursor:pointer; padding:.25rem 0; }
+    .sin-slot-up:hover { color:var(--g); }
 
     @media (max-width:640px) { .sin-grid-fields { grid-template-columns:1fr; } }
     `}</style>
