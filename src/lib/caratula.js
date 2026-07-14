@@ -49,4 +49,133 @@ function construirCaratula(s) {
   let filas = ''
   for (let i = 0; i < pares.length; i += 2) {
     const cel = (p) => p ? `<td style="${F}width:50%;padding:9px 12px;vertical-align:top;border:1px solid #000;">
-        <div
+        <div style="font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:#555;">${p[0]}</div>
+        <div style="font-size:14px;font-weight:bold;margin-top:3px;">${p[1]}</div></td>` : '<td style="border:1px solid #000;"></td>'
+    filas += `<tr>${cel(pares[i])}${cel(pares[i + 1])}</tr>`
+  }
+
+  return `
+<div class="crt-doc" style="${F}width:720px;margin:0 auto;background:#fff;color:#000;padding:34px 40px;">
+
+  <div style="text-align:center;border-bottom:2px solid #000;padding-bottom:14px;">
+    <div style="font-size:22px;font-weight:bold;letter-spacing:.04em;">IA&nbsp;&nbsp;|&nbsp;&nbsp;${MIS_DATOS.nombre.toUpperCase()}</div>
+    <div style="font-size:11px;letter-spacing:.25em;text-transform:uppercase;color:#333;margin-top:3px;">${MIS_DATOS.subtitulo || ''}</div>
+  </div>
+
+  <div style="text-align:center;margin:36px 0 10px;">
+    <div style="font-size:13px;letter-spacing:.3em;color:#666;">CARPETA DE SINIESTRO N°</div>
+    <div style="font-size:104px;font-weight:bold;line-height:1;margin-top:4px;">${carpetaFmt(s.carpeta_nro)}</div>
+    <div style="display:inline-block;margin-top:10px;font-size:10px;letter-spacing:.15em;text-transform:uppercase;padding:3px 14px;border:1px solid #000;">
+      ${cerrado ? 'CERRADO' : 'EN TRÁMITE'}
+    </div>
+  </div>
+
+  <div style="border-top:1px solid #000;border-bottom:1px solid #000;padding:20px 10px;margin:28px 0;text-align:center;">
+    <div style="font-size:22px;font-weight:bold;">${val(s.req_nombre)}</div>
+    <div style="font-size:13px;color:#666;margin:8px 0;">c /</div>
+    <div style="font-size:22px;font-weight:bold;">${val(s.rdo_nombre)}</div>
+    <div style="font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:#666;margin-top:12px;">s / Siniestro</div>
+  </div>
+
+  <table style="width:100%;border-collapse:collapse;margin-top:20px;">${filas}</table>
+
+  <div style="text-align:center;margin-top:40px;font-size:10px;color:#555;line-height:1.6;">
+    ${dom.dir}<br>Carátula generada el ${fmtF(new Date().toISOString().slice(0, 10))}
+  </div>
+
+</div>`
+}
+
+// ╔══════════════════════════════════════════════════════════════╗
+// ║  FORMULARIO (réplica del papel, relleno) — A4                 ║
+// ╚══════════════════════════════════════════════════════════════╝
+function construirFormulario(s, docCats = []) {
+  const has = (k) => docCats.includes(k)
+  const cerrado = (s.estado || 'abierto') === 'cerrado'
+  const box = 'border:1.4px solid #000;padding:8px 10px;margin-bottom:8px;'
+  const line = 'font-size:11px;line-height:2.1;'
+  const u = (v) => `<span style="border-bottom:1px solid #000;padding:0 4px;font-weight:bold;">${val(v)}</span>`
+
+  return `
+<div class="frm-doc" style="${F}width:720px;margin:0 auto;background:#fff;color:#000;padding:24px 26px;font-size:11px;">
+
+  <div style="${box}">
+    <div style="${line}">SINIESTRO: ${u(s.nro_siniestro)} &nbsp;&nbsp; COMPAÑÍA: ${u(s.compania)} &nbsp;&nbsp; CARPETA: ${u(carpetaFmt(s.carpeta_nro))}</div>
+    <div style="${line}">REQUIRENTE: ${u(s.req_nombre)}</div>
+    <div style="${line}">DNI: ${u(s.req_dni)} &nbsp;&nbsp; Teléfono: ${u(s.req_telefono)}</div>
+  </div>
+
+  <div style="${box}">
+    <div style="${line}">SINIESTRO: ${u(s.nro_siniestro)} &nbsp;&nbsp; Fecha: ${u(fF(s.fecha_hecho))} &nbsp;&nbsp; Hora: ${u(s.hora_hecho)}</div>
+    <div style="${line}">Lugar: ${u(s.lugar)}</div>
+    <div style="${line}">Lesiones? ${sino(s.lesiones)}</div>
+    <div style="${line}">Adjunta Comprobantes Médicos? ${sino(s.comprobantes_medicos)}</div>
+    <div style="${line}">Aseguradora: ${u(s.aseguradora)}</div>
+    <div style="${line}">Denuncia Administrativa: ${sino(s.denuncia_admin)}</div>
+    <div style="${line}">Teléfono: ${u(s.aseg_telefono)} &nbsp;&nbsp; Domicilio: ${u(s.aseg_domicilio)}</div>
+    <div style="${line}">Contacto: ${u(s.aseg_contacto)} &nbsp;&nbsp; Mail: ${u(s.aseg_mail)}</div>
+  </div>
+
+  <div style="${box}">
+    <div style="${line}">REQUERIDO: ${u(s.rdo_nombre)} &nbsp;&nbsp; Vehículo: ${u(s.rdo_vehiculo)}</div>
+    <div style="${line}">Teléfono: ${u(s.rdo_telefono)} &nbsp;&nbsp; Domicilio: ${u(s.rdo_domicilio)}</div>
+    <div style="${line}">DNI: ${u(s.rdo_dni)} &nbsp;&nbsp; Dominio: ${u(s.rdo_dominio)} &nbsp;&nbsp; Póliza: ${u(s.rdo_poliza)}</div>
+  </div>
+
+  <div style="${line}margin-bottom:8px;">Mediación: ${sino(s.mediacion)} &nbsp;&nbsp; Fecha: ${u(fF(s.mediacion_fecha))} &nbsp;&nbsp; <span style="font-size:10px;">Contacto 4371-3018 – abeniacar@gomezabeniacar.com.ar</span></div>
+
+  <div style="${box}">
+    <div style="${line}">Lesiones: ${u(s.lesiones_detalle)}</div>
+    <div style="${line}">Daños: ${u(s.danos_detalle)}</div>
+  </div>
+
+  <div style="${line}margin-bottom:8px;">VISTA MÉDICA: ${sino(s.vista_medica)} &nbsp;&nbsp; Fecha: ${u(fF(s.vm_fecha))} &nbsp;&nbsp; Dr: ${u(s.vm_dr)}</div>
+  <div style="${line}margin-bottom:8px;">Domicilio: ${u(s.vm_domicilio)} &nbsp;&nbsp; Teléfono: ${u(s.vm_telefono)}</div>
+
+  <div style="border:1.4px dashed #000;padding:10px;margin-bottom:8px;${line}">
+    DOCUMENTACIÓN: DNI ${chk(has('DNI'))} &nbsp; CV ${chk(has('CV'))} &nbsp; REG ${chk(has('REG'))} &nbsp; SEG ${chk(has('SEG'))} &nbsp; FOTOS ${chk(has('FOTOS'))}<br>
+    DA ${chk(has('DA'))} &nbsp; CERT. COB. ${chk(has('CERT_COB'))} &nbsp; PRESUPUESTO ${chk(has('PRESUPUESTO'))}
+  </div>
+
+  <div style="${line}">CERRADO? ${sino(cerrado)} &nbsp;&nbsp; Fecha de Pago: ${u(fF(s.fecha_pago))} &nbsp;&nbsp; $: ${u(s.monto_pago != null && s.monto_pago !== '' ? Number(s.monto_pago).toLocaleString('es-AR') : '')}</div>
+
+</div>`
+}
+
+// ── Generación / descarga (patrón idéntico a recibo.js) ──
+async function generar(html, filename, selector) {
+  try {
+    const html2pdf = await loadHtml2Pdf()
+    const host = document.createElement('div')
+    host.style.cssText = 'position:fixed; left:-10000px; top:0; z-index:-1; background:#fff;'
+    host.innerHTML = html
+    document.body.appendChild(host)
+    await waitImages(host)
+    try {
+      await html2pdf().set({
+        margin: 8,
+        filename,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 3, backgroundColor: '#ffffff', useCORS: true, imageTimeout: 15000 },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak: { mode: ['avoid-all'] },
+      }).from(host.querySelector(selector)).save()
+    } finally {
+      document.body.removeChild(host)
+    }
+  } catch (e) {
+    const w = window.open('', '_blank')
+    if (!w) { alert('No se pudo generar el PDF. Permití las ventanas emergentes.'); return }
+    w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${filename}</title>
+      <style>@page{size:A4;margin:8mm}body{margin:0}</style></head><body>${html}</body></html>`)
+    w.document.close()
+    setTimeout(() => { w.focus(); w.print() }, 400)
+  }
+}
+
+export function imprimirCaratula(s) {
+  return generar(construirCaratula(s), `Caratula-${carpetaFmt(s.carpeta_nro)}.pdf`, '.crt-doc')
+}
+export function imprimirFormulario(s, docCats = []) {
+  return generar(construirFormulario(s, docCats), `Formulario-${carpetaFmt(s.carpeta_nro)}.pdf`, '.frm-doc')
+}
