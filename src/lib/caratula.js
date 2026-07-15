@@ -37,8 +37,6 @@ const sino = (v) => `${chk(!!v)}&nbsp;Sí&nbsp;&nbsp;${chk(!v)}&nbsp;No`
 
 // Compañía de seguros: dato único. `compania` queda solo como fallback de datos viejos.
 const cia = (s) => val(s.aseguradora || s.compania)
-// Calidad del tercero: el campo real es req_calidad
-const calidad = (s) => val(s.req_calidad)
 
 // ╔══════════════════════════════════════════════════════════════╗
 // ║  CARÁTULA (tapa de carpeta) — A4                              ║
@@ -48,7 +46,7 @@ function construirCaratula(s) {
     { label: 'N° de Siniestro',     value: val(s.nro_siniestro) },
     { label: 'Compañía / Aseg.',    value: cia(s) },
     { label: 'CUIT Compañía',       value: val(s.aseg_cuit) },
-    { label: 'Calidad del Tercero', value: calidad(s) },
+    { label: 'Calidad del Tercero', value: val(s.req_calidad) },
     { label: 'Fecha del Hecho',     value: fF(s.fecha_hecho) },
     { label: 'Lugar',               value: val(s.lugar) },
     { label: 'Dominio Reclamado',   value: val(s.rdo_dominio) },
@@ -111,15 +109,35 @@ function construirFormulario(s, docCats = []) {
   const box = 'border:1.5px solid #000; padding:10px 12px; margin-bottom:10px; box-sizing:border-box;'
   const titleBox = 'font-size:13px; font-weight:bold; text-transform:uppercase; border-bottom:1px solid #000; padding-bottom:4px; margin-bottom:8px; color:#111;'
   const line = 'font-size:13px; line-height:1.8; color:#000;'
+  const compact = 'font-size:13px; line-height:1.6; color:#000; margin:4px 2px 10px; padding:5px 8px; background:#f9f9f9; border:1px solid #ddd;'
   const u = (v) => `<span style="padding:0 2px; font-weight:bold; font-size:13px;">${val(v)}</span>`
 
-  // Bloque de derivación: solo si está tildado
+  // ── Bloques condicionales: el detalle solo se despliega si está tildado ──
+
   const derivadoBlock = s.derivado ? `
   <div style="${box}">
     <div style="${titleBox}">Derivado — Estudio Liquidador</div>
-    <div style="${line}">ESTUDIO: ${u(s.derivado_estudio)} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; RESPONSABLE: ${u(s.derivado_responsable)}</div>
+    <div style="${line}">ESTUDIO: ${u(s.derivado_estudio)}</div>
+    <div style="${line}">RESPONSABLE: ${u(s.derivado_responsable)}</div>
     <div style="${line}">TEL. / MAIL: ${u(s.derivado_telefono)} &nbsp;/&nbsp; ${u(s.derivado_mail)}</div>
   </div>` : ''
+
+  const mediacionBlock = s.mediacion ? `
+  <div style="${box}">
+    <div style="${titleBox}">Mediación</div>
+    <div style="${line}">FECHA: ${u(fF(s.mediacion_fecha))} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; MEDIADOR/A: ${u(s.mediacion_nombre)}</div>
+    <div style="font-size:11px; color:#555; font-weight:bold; margin-top:4px;">Contacto: 4371-3018 – abeniacar@gomezabeniacar.com.ar</div>
+  </div>` : `
+  <div style="${compact}">MEDIACIÓN: ${sino(s.mediacion)}</div>`
+
+  const vistaMedicaBlock = s.vista_medica ? `
+  <div style="${box}">
+    <div style="${titleBox}">Vista Médica</div>
+    <div style="${line}">FECHA: ${u(fF(s.vm_fecha))} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; PROFESIONAL INTERVENIENTE: ${u(s.vm_dr)}</div>
+    <div style="${line}">DOMICILIO / TEL: ${u(s.vm_domicilio)} &nbsp;/&nbsp; ${u(s.vm_telefono)}</div>
+    <div style="${line}">MAIL: ${u(s.vm_mail)}</div>
+  </div>` : `
+  <div style="${compact}">VISTA MÉDICA: ${sino(s.vista_medica)}</div>`
 
   return `
 <div class="frm-doc" style="${F}width:720px; box-sizing:border-box; margin:0 auto; background:#fff; color:#000; padding:30px 35px; font-size:13px;">
@@ -132,11 +150,13 @@ function construirFormulario(s, docCats = []) {
 
   <!-- BLOQUE DESTACADO: Identificadores Principales -->
   <div style="${box} background:#fcfcfc; border-width:2px;">
-    <div style="display:flex; justify-content:space-between; font-size:16px; font-weight:bold; line-height:1.4;">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; font-size:16px; font-weight:bold; line-height:1.4;">
       <div>SINIESTRO N°: <span>${val(s.nro_siniestro)}</span></div>
-      <div>COMPAÑÍA: <span>${cia(s)}</span></div>
+      <div style="text-align:right;">
+        <div>COMPAÑÍA: <span>${cia(s)}</span></div>
+        <div style="font-size:11px; color:#555; font-weight:bold; margin-top:2px;">CUIT: ${val(s.aseg_cuit)}</div>
+      </div>
     </div>
-    <div style="font-size:11px; color:#555; margin-top:4px; font-weight:bold;">CUIT: ${val(s.aseg_cuit)}</div>
   </div>
 
   <!-- Bloque 1: Requirente -->
@@ -168,11 +188,7 @@ function construirFormulario(s, docCats = []) {
     <div style="${line}">DOMICILIO / TEL: ${u(s.rdo_domicilio)} &nbsp;/&nbsp; ${u(s.rdo_telefono)}</div>
   </div>
 
-  <!-- Bloque Intermedio: Mediación -->
-  <div style="${line} margin: 4px 2px 10px; padding: 4px 6px; background:#f9f9f9; border: 1px solid #ddd;">
-    MEDIACIÓN: ${sino(s.mediacion)} &nbsp;&nbsp;&nbsp;&nbsp; FECHA: ${u(fF(s.mediacion_fecha))} &nbsp;&nbsp;&nbsp;&nbsp; MEDIADOR/A: ${u(s.mediacion_nombre)}
-    <div style="font-size:11px; color:#555; font-weight:bold; margin-top:2px;">Contacto: 4371-3018 – abeniacar@gomezabeniacar.com.ar</div>
-  </div>
+  ${mediacionBlock}
 
   <!-- Bloque 4: Daños -->
   <div style="${box}">
@@ -181,13 +197,7 @@ function construirFormulario(s, docCats = []) {
     <div style="${line}"><strong>PRESUPUESTO A RECLAMAR:</strong> ${u(money(s.monto_presupuesto))}</div>
   </div>
 
-  <!-- Bloque 5: Vista Médica -->
-  <div style="${box}">
-    <div style="${titleBox}">Vista Médica</div>
-    <div style="${line}">VISTA MÉDICA: ${sino(s.vista_medica)} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; FECHA: ${u(fF(s.vm_fecha))} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; PROFESIONAL INTERVENIENTE: ${u(s.vm_dr)}</div>
-    <div style="${line}">DOMICILIO / TEL: ${u(s.vm_domicilio)} &nbsp;/&nbsp; ${u(s.vm_telefono)}</div>
-    <div style="${line}">MAIL: ${u(s.vm_mail)}</div>
-  </div>
+  ${vistaMedicaBlock}
 
   <!-- Bloque 6: Checkbox Documentación -->
   <div style="border:1.5px dashed #000; padding:10px 12px; ${line} background:#fafafa;">
@@ -207,8 +217,14 @@ function construirFormulario(s, docCats = []) {
 </div>`
 }
 
-// ── Generación / descarga ──
+// ╔══════════════════════════════════════════════════════════════╗
+// ║  Generación — SIEMPRE una sola carilla A4                     ║
+// ╚══════════════════════════════════════════════════════════════╝
+// Estrategia: capturamos el bloque como imagen y la encajamos en la página
+// escalándola proporcionalmente. Si el contenido es corto entra a lo ancho;
+// si es largo, se achica para entrar a lo alto. Nunca hay segunda hoja.
 async function generar(html, filename, selector) {
+  const MARGEN_MM = 6
   try {
     const html2pdf = await loadHtml2Pdf()
     const host = document.createElement('div')
@@ -216,23 +232,48 @@ async function generar(html, filename, selector) {
     host.innerHTML = html
     document.body.appendChild(host)
     await waitImages(host)
+
     try {
-      await html2pdf().set({
-        margin: 0,
-        filename,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 3, backgroundColor: '#ffffff', useCORS: true, imageTimeout: 15000 },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak: { mode: ['avoid-all'] },
-      }).from(host.querySelector(selector)).save()
+      const el = host.querySelector(selector)
+
+      // 1) El bloque a imagen
+      const canvas = await html2pdf()
+        .set({
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: { scale: 3, backgroundColor: '#ffffff', useCORS: true, imageTimeout: 15000 },
+        })
+        .from(el)
+        .toCanvas()
+        .get('canvas')
+
+      // 2) La imagen encajada en una única A4
+      const JsPDF = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF
+      if (!JsPDF) throw new Error('jsPDF no disponible')
+
+      const pdf = new JsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' })
+      const pw = pdf.internal.pageSize.getWidth()
+      const ph = pdf.internal.pageSize.getHeight()
+      const dispW = pw - MARGEN_MM * 2
+      const dispH = ph - MARGEN_MM * 2
+
+      // escala proporcional: la que sea más restrictiva (ancho o alto)
+      const k = Math.min(dispW / canvas.width, dispH / canvas.height)
+      const w = canvas.width * k
+      const h = canvas.height * k
+      const x = (pw - w) / 2
+      const y = MARGEN_MM
+
+      pdf.addImage(canvas.toDataURL('image/jpeg', 0.98), 'JPEG', x, y, w, h)
+      pdf.save(filename)
     } finally {
       document.body.removeChild(host)
     }
   } catch (e) {
+    // Fallback: impresión del navegador, ajustada a una carilla
     const w = window.open('', '_blank')
     if (!w) { alert('No se pudo generar el PDF. Permití las ventanas emergentes.'); return }
     w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${filename}</title>
-      <style>@page{size:A4;margin:0mm}body{margin:0}</style></head><body>${html}</body></html>`)
+      <style>@page{size:A4;margin:6mm}body{margin:0}</style></head><body>${html}</body></html>`)
     w.document.close()
     setTimeout(() => { w.focus(); w.print() }, 400)
   }
