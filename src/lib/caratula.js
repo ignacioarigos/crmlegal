@@ -27,29 +27,44 @@ function waitImages(root) {
 const carpetaFmt = (n) => (n == null ? '—' : String(n).padStart(3, '0'))
 const val = (v) => (v == null || v === '') ? '—' : String(v)
 const fF  = (s) => s ? fmtF(s) : '—'
+const money = (v) => {
+  if (v == null || v === '') return '—'
+  const n = Number(v)
+  return Number.isFinite(n) ? '$ ' + n.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'
+}
 const chk = (on) => `<span style="display:inline-block;width:12px;height:12px;border:1px solid #000;text-align:center;line-height:11px;font-size:11px;vertical-align:middle;font-weight:bold;">${on ? '×' : '&nbsp;'}</span>`
 const sino = (v) => `${chk(!!v)}&nbsp;Sí&nbsp;&nbsp;${chk(!v)}&nbsp;No`
+
+// Compañía de seguros: dato único. `compania` queda solo como fallback de datos viejos.
+const cia = (s) => val(s.aseguradora || s.compania)
+// Calidad del tercero: el campo real es req_calidad
+const calidad = (s) => val(s.req_calidad)
 
 // ╔══════════════════════════════════════════════════════════════╗
 // ║  CARÁTULA (tapa de carpeta) — A4                              ║
 // ╚══════════════════════════════════════════════════════════════╝
 function construirCaratula(s) {
-  const tipoMovilidad = s.req_rol || s.rdo_vehiculo || s.vehiculo || '';
-
   const items = [
     { label: 'N° de Siniestro',     value: val(s.nro_siniestro) },
-    { label: 'Compañía / Aseg.',    value: val(s.aseguradora || s.compania) },
-    { label: 'Calidad del Tercero', value: val(tipoMovilidad) },
+    { label: 'Compañía / Aseg.',    value: cia(s) },
+    { label: 'CUIT Compañía',       value: val(s.aseg_cuit) },
+    { label: 'Calidad del Tercero', value: calidad(s) },
     { label: 'Fecha del Hecho',     value: fF(s.fecha_hecho) },
     { label: 'Lugar',               value: val(s.lugar) },
     { label: 'Dominio Reclamado',   value: val(s.rdo_dominio) },
-    { label: 'Requerido',           value: val(s.rdo_nombre) }
+    { label: 'Requerido',           value: val(s.rdo_nombre) },
   ]
+  if (s.derivado) {
+    items.push({ label: 'Estudio Liquidador', value: val(s.derivado_estudio) })
+  }
+  if (s.monto_presupuesto != null && s.monto_presupuesto !== '') {
+    items.push({ label: 'Presupuesto', value: money(s.monto_presupuesto) })
+  }
 
   let filasDatos = ''
   items.forEach(item => {
     filasDatos += `
-      <div style="display: flex; padding: 10px 0; border-bottom: 1px dashed #e0e0e0; line-height: 1.4;">
+      <div style="display: flex; padding: 9px 0; border-bottom: 1px dashed #e0e0e0; line-height: 1.4;">
         <div style="width: 180px; font-weight: bold; text-transform: uppercase; font-size: 11px; letter-spacing: .08em; color: #666; display: flex; align-items: center; padding-right: 10px;">
           ${item.label}:
         </div>
@@ -74,7 +89,7 @@ function construirCaratula(s) {
     <div style="border-top:1.5px solid #000; border-bottom:1.5px solid #000; padding:22px 15px; margin:30px 0; text-align:center; background: #fafafa;">
       <div style="font-size:23px; font-weight:bold; color:#000; letter-spacing: .02em;">${val(s.req_nombre)}</div>
       <div style="font-size:13px; font-weight:bold; text-transform:uppercase; color:#777; margin:10px 0; letter-spacing: .2em;">c /</div>
-      <div style="font-size:23px; font-weight:bold; color:#000; letter-spacing: .02em;">${val(s.aseguradora || s.compania)}</div>
+      <div style="font-size:23px; font-weight:bold; color:#000; letter-spacing: .02em;">${cia(s)}</div>
     </div>
     <div style="margin-top:30px; padding: 0 5px;">
       ${filasDatos}
@@ -91,13 +106,20 @@ function construirCaratula(s) {
 // ╚══════════════════════════════════════════════════════════════╝
 function construirFormulario(s, docCats = []) {
   const has = (k) => docCats.includes(k)
-  const tipoMovilidad = s.req_rol || s.rdo_vehiculo || s.vehiculo || '';
-  
+
   // Estilos base sin subrayados
   const box = 'border:1.5px solid #000; padding:10px 12px; margin-bottom:10px; box-sizing:border-box;'
   const titleBox = 'font-size:13px; font-weight:bold; text-transform:uppercase; border-bottom:1px solid #000; padding-bottom:4px; margin-bottom:8px; color:#111;'
   const line = 'font-size:13px; line-height:1.8; color:#000;'
   const u = (v) => `<span style="padding:0 2px; font-weight:bold; font-size:13px;">${val(v)}</span>`
+
+  // Bloque de derivación: solo si está tildado
+  const derivadoBlock = s.derivado ? `
+  <div style="${box}">
+    <div style="${titleBox}">Derivado — Estudio Liquidador</div>
+    <div style="${line}">ESTUDIO: ${u(s.derivado_estudio)} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; RESPONSABLE: ${u(s.derivado_responsable)}</div>
+    <div style="${line}">TEL. / MAIL: ${u(s.derivado_telefono)} &nbsp;/&nbsp; ${u(s.derivado_mail)}</div>
+  </div>` : ''
 
   return `
 <div class="frm-doc" style="${F}width:720px; box-sizing:border-box; margin:0 auto; background:#fff; color:#000; padding:30px 35px; font-size:13px;">
@@ -112,8 +134,9 @@ function construirFormulario(s, docCats = []) {
   <div style="${box} background:#fcfcfc; border-width:2px;">
     <div style="display:flex; justify-content:space-between; font-size:16px; font-weight:bold; line-height:1.4;">
       <div>SINIESTRO N°: <span>${val(s.nro_siniestro)}</span></div>
-      <div>COMPAÑÍA: <span>${val(s.compania || s.aseguradora)}</span></div>
+      <div>COMPAÑÍA: <span>${cia(s)}</span></div>
     </div>
+    <div style="font-size:11px; color:#555; margin-top:4px; font-weight:bold;">CUIT: ${val(s.aseg_cuit)}</div>
   </div>
 
   <!-- Bloque 1: Requirente -->
@@ -121,7 +144,7 @@ function construirFormulario(s, docCats = []) {
     <div style="${titleBox}">Datos del Requirente</div>
     <div style="${line}">NOMBRE Y APELLIDO: ${u(s.req_nombre)}</div>
     <div style="${line}">DNI: ${u(s.req_dni)} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; TELÉFONO: ${u(s.req_telefono)}</div>
-    <div style="${line}">CALIDAD DEL TERCERO: ${u(tipoMovilidad)}</div>
+    <div style="${line}">CALIDAD DEL TERCERO: ${u(s.req_calidad)}</div>
   </div>
 
   <!-- Bloque 2: El Hecho -->
@@ -130,10 +153,12 @@ function construirFormulario(s, docCats = []) {
     <div style="${line}">FECHA: ${u(fF(s.fecha_hecho))} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; HORA: ${u(s.hora_hecho)}</div>
     <div style="${line}">LUGAR: ${u(s.lugar)}</div>
     <div style="${line}">¿PRESENTA LESIONES?: ${sino(s.lesiones)} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ¿ADJUNTA COMPROBANTES MÉDICOS?: ${sino(s.comprobantes_medicos)}</div>
-    <div style="${line}; margin-top:4px; border-top:1px dashed #ccc; padding-top:4px;">ASEGURADORA: ${u(s.aseguradora)} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; DENUNCIA ADMINISTRATIVA: ${sino(s.denuncia_admin)}</div>
+    <div style="${line}; margin-top:4px; border-top:1px dashed #ccc; padding-top:4px;">DENUNCIA ADMINISTRATIVA: ${sino(s.denuncia_admin)} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; DERIVADO: ${sino(s.derivado)}</div>
     <div style="${line}">DOMICILIO CO. / TEL: ${u(s.aseg_domicilio)} &nbsp;/&nbsp; ${u(s.aseg_telefono)}</div>
     <div style="${line}">CONTACTO / EMAIL: ${u(s.aseg_contacto)} &nbsp;/&nbsp; ${u(s.aseg_mail)}</div>
   </div>
+
+  ${derivadoBlock}
 
   <!-- Bloque 3: Requerido -->
   <div style="${box}">
@@ -145,21 +170,23 @@ function construirFormulario(s, docCats = []) {
 
   <!-- Bloque Intermedio: Mediación -->
   <div style="${line} margin: 4px 2px 10px; padding: 4px 6px; background:#f9f9f9; border: 1px solid #ddd;">
-    MEDIACIÓN: ${sino(s.mediacion)} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; FECHA: ${u(fF(s.mediacion_fecha))} 
-    <span style="font-size:11px; float:right; color:#555; font-weight:bold; margin-top:2px;">Contacto: 4371-3018 – abeniacar@gomezabeniacar.com.ar</span>
+    MEDIACIÓN: ${sino(s.mediacion)} &nbsp;&nbsp;&nbsp;&nbsp; FECHA: ${u(fF(s.mediacion_fecha))} &nbsp;&nbsp;&nbsp;&nbsp; MEDIADOR/A: ${u(s.mediacion_nombre)}
+    <div style="font-size:11px; color:#555; font-weight:bold; margin-top:2px;">Contacto: 4371-3018 – abeniacar@gomezabeniacar.com.ar</div>
   </div>
 
   <!-- Bloque 4: Daños -->
   <div style="${box}">
     <div style="${line}"><strong>LESIONES:</strong> ${u(s.lesiones_detalle)}</div>
     <div style="${line}"><strong>DAÑOS MATERIALES:</strong> ${u(s.danos_detalle)}</div>
+    <div style="${line}"><strong>PRESUPUESTO A RECLAMAR:</strong> ${u(money(s.monto_presupuesto))}</div>
   </div>
 
   <!-- Bloque 5: Vista Médica -->
   <div style="${box}">
     <div style="${titleBox}">Vista Médica</div>
     <div style="${line}">VISTA MÉDICA: ${sino(s.vista_medica)} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; FECHA: ${u(fF(s.vm_fecha))} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; PROFESIONAL INTERVENIENTE: ${u(s.vm_dr)}</div>
-    <div style="${line}">DOMICILIO / TEL. VISTA: ${u(s.vm_domicilio)} &nbsp;/&nbsp; ${u(s.vm_telefono)}</div>
+    <div style="${line}">DOMICILIO / TEL: ${u(s.vm_domicilio)} &nbsp;/&nbsp; ${u(s.vm_telefono)}</div>
+    <div style="${line}">MAIL: ${u(s.vm_mail)}</div>
   </div>
 
   <!-- Bloque 6: Checkbox Documentación -->
