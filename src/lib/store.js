@@ -47,16 +47,18 @@ export async function loadAll() {
     _state.tramites = tr
   }
 
-  // Siniestros (guardado defensivo: no debe romper loadAll si falla)
+  // Siniestros + aseguradoras (defensivo: no debe romper loadAll si falla)
   try {
-    const [s, sd] = await Promise.all([
-      DB.get('crm_siniestros'), DB.get('crm_siniestro_docs'),
+    const [s, sd, ag] = await Promise.all([
+      DB.get('crm_siniestros'), DB.get('crm_siniestro_docs'), DB.get('crm_aseguradoras'),
     ])
     _state.siniestros     = s  || []
     _state.siniestro_docs = sd || []
+    _state.aseguradoras   = ag || []
   } catch {
     _state.siniestros     = _state.siniestros || []
     _state.siniestro_docs = _state.siniestro_docs || []
+    _state.aseguradoras   = _state.aseguradoras || []
   }
 
   _state.loaded = true
@@ -271,5 +273,35 @@ export async function deleteDoc(id, storage_path) {
     body: JSON.stringify({ id, storage_path }),
   })
   _state.siniestro_docs = _state.siniestro_docs.filter(d => d.id !== id)
+  notify()
+}
+
+// ── Aseguradoras (memoria de contactos) ───────────────────────
+const _norm = (s) => (s || '').toString().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase()
+
+export function findAseguradora(nombre) {
+  if (!nombre) return null
+  const k = _norm(nombre)
+  return _state.aseguradoras.find(a => _norm(a.nombre) === k) || null
+}
+
+// Guarda lo que falte: si la aseguradora no existe la crea, y completa
+// solo los campos de contacto que estén vacíos (no pisa lo ya cargado).
+export async function syncAseguradora(nombre, datos = {}) {
+  if (!nombre || !nombre.trim()) return
+  const campos = ['telefono', 'domicilio', 'contacto', 'mail']
+  const found = findAseguradora(nombre)
+  if (found) {
+    const patch = {}
+    for (const k of campos) if (datos[k] && !found[k]) patch[k] = datos[k]
+    if (!Object.keys(patch).length) return
+    await DB.update('crm_aseguradoras', found.id, patch)
+    _state.aseguradoras = _state.aseguradoras.map(a => a.id === found.id ? { ...a, ...patch } : a)
+  } else {
+    const row = { id: uid(), nombre: nombre.trim() }
+    for (const k of campos) if (datos[k]) row[k] = datos[k]
+    await DB.insert('crm_aseguradoras', row)
+    _state.aseguradoras = [..._state.aseguradoras, row]
+  }
   notify()
 }
