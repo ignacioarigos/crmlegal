@@ -38,25 +38,25 @@ const montoFmt = (v) => {
 const blank = () => ({
   id: uid(),
   carpeta_nro: null,
-  nro_siniestro: '', compania: '', causa_id: null, estado: 'abierto',
-  
+  nro_siniestro: '', estado: 'abierto',
+
   // Detalle del hecho
   fecha_hecho: '', hora_hecho: '', lugar: '',
-  
+
   // Lesiones
   lesiones: false, comprobantes_medicos: false, lesiones_detalle: '',
-  
-  // Datos del Seguro
+
+  // Datos del Seguro (aseguradora = compañía de seguros, dato único)
   aseguradora: '', aseg_cuit: '', denuncia_admin: false,
   aseg_telefono: '', aseg_domicilio: '', aseg_contacto: '', aseg_mail: '',
-  
+
   // Derivado (Estudio Liquidador)
   derivado: false,
   derivado_estudio: '', derivado_responsable: '', derivado_telefono: '', derivado_mail: '',
 
   // Requirente
   req_nombre: '', req_dni: '', req_telefono: '',
-  req_calidad: '', // Auto - Moto - Bicicleta - Tercero - Peatón
+  req_calidad: '',
 
   // Requerido
   rdo_nombre: '', rdo_vehiculo: '', rdo_telefono: '', rdo_domicilio: '',
@@ -65,12 +65,13 @@ const blank = () => ({
 
   // Mediación
   mediacion: false, mediacion_fecha: '', mediacion_id: null, mediacion_nombre: '',
-  
+
   // Vista médica
   vista_medica: false, vm_fecha: '', vm_medico_id: null, vm_dr: '', vm_domicilio: '', vm_telefono: '', vm_mail: '',
-  
-  // Presupuesto
+
+  // Presupuesto / cierre
   monto_presupuesto: '',
+  fecha_pago: '', monto_pago: '',
 })
 
 // ── Campos (leen/editan según `editing`) ──
@@ -112,13 +113,23 @@ function Bool({ label, value, onChange, editing }) {
   )
 }
 
+// Solo lectura (para ecos de un dato cargado en otra sección)
+function Eco({ label, value, nota }) {
+  return (
+    <label className="sin-field">
+      <span>{label}{nota && <em className="sin-eco-nota"> · {nota}</em>}</span>
+      <div className="sin-ro eco">{value || '—'}</div>
+    </label>
+  )
+}
+
 // ══════════════════════════════════════════════════════════════
 export default function Siniestros({ store }) {
   const siniestros = store.siniestros || []
   const docs = store.siniestro_docs || []
   const aseguradoras = store.aseguradoras || []
-  
-  // Base de datos local simulada para Mediadoras y Médicos (para vincular en tu BD después)
+
+  // TODO: pasar a tablas propias (crm_mediadoras / crm_medicos), como se hizo con aseguradoras
   const mediadoras = store.mediadoras || [{ id: 1, nombre: 'Dra. María Laura Rossi' }]
   const medicos = store.medicos || [
     { id: 1, nombre: 'Dr. Juan Pérez', direccion: 'Av. Corrientes 1234', mail: 'juan.perez@mail.com', telefono: '11-4567-8901' }
@@ -141,17 +152,16 @@ export default function Siniestros({ store }) {
       const next = { ...f, aseguradora: v }
       const known = findAseguradora(v)
       if (known) {
+        if (!next.aseg_cuit && known.cuit)           next.aseg_cuit      = known.cuit
         if (!next.aseg_telefono && known.telefono)   next.aseg_telefono  = known.telefono
         if (!next.aseg_domicilio && known.domicilio) next.aseg_domicilio = known.domicilio
         if (!next.aseg_contacto && known.contacto)   next.aseg_contacto  = known.contacto
         if (!next.aseg_mail && known.mail)           next.aseg_mail      = known.mail
-        if (!next.aseg_cuit && known.cuit)           next.aseg_cuit      = known.cuit
       }
       return next
     })
   }
 
-  // Auto-completar Médico Seleccionado
   const handleMedicoSelect = (nombre) => {
     const med = medicos.find(m => m.nombre === nombre)
     if (med) {
@@ -161,22 +171,17 @@ export default function Siniestros({ store }) {
         vm_domicilio: med.direccion,
         vm_telefono: med.telefono,
         vm_mail: med.mail,
-        vm_medico_id: med.id
+        vm_medico_id: String(med.id),
       }))
     } else {
       set('vm_dr', nombre)
     }
   }
 
-  // Auto-completar Mediadora Seleccionada
   const handleMediacionSelect = (nombre) => {
     const med = mediadoras.find(m => m.nombre === nombre)
     if (med) {
-      setFicha(f => ({
-        ...f,
-        mediacion_nombre: med.nombre,
-        mediacion_id: med.id
-      }))
+      setFicha(f => ({ ...f, mediacion_nombre: med.nombre, mediacion_id: String(med.id) }))
     } else {
       set('mediacion_nombre', nombre)
     }
@@ -198,19 +203,21 @@ export default function Siniestros({ store }) {
       const clean = Object.fromEntries(
         Object.entries(ficha).map(([k, v]) => [k, v === '' ? null : v])
       )
-      if (clean.monto_presupuesto != null) {
-        const n = Number(clean.monto_presupuesto)
-        clean.monto_presupuesto = Number.isFinite(n) ? n : null
+      for (const k of ['monto_presupuesto', 'monto_pago']) {
+        if (clean[k] != null) {
+          const n = Number(clean[k])
+          clean[k] = Number.isFinite(n) ? n : null
+        }
       }
       const saved = await saveSiniestro(clean)
 
       try {
         await syncAseguradora(clean.aseguradora, {
+          cuit:      clean.aseg_cuit,
           telefono:  clean.aseg_telefono,
           domicilio: clean.aseg_domicilio,
           contacto:  clean.aseg_contacto,
           mail:      clean.aseg_mail,
-          cuit:      clean.aseg_cuit,
         })
       } catch {}
 
@@ -237,8 +244,8 @@ export default function Siniestros({ store }) {
       .filter((s) => {
         if (!q.trim()) return true
         const hay = norm([
-          carpetaFmt(s.carpeta_nro), s.nro_siniestro, s.compania,
-          s.req_nombre, s.rdo_nombre, s.aseguradora, s.rdo_dominio,
+          carpetaFmt(s.carpeta_nro), s.nro_siniestro, s.aseguradora,
+          s.req_nombre, s.rdo_nombre, s.rdo_dominio,
         ].join(' '))
         return hay.includes(norm(q))
       })
@@ -287,7 +294,7 @@ export default function Siniestros({ store }) {
                   </div>
                   <div className="sin-card-cliente">{s.req_nombre || 'Sin requirente'}</div>
                   <div className="sin-card-meta">
-                    {s.compania && <span>{s.compania}</span>}
+                    {s.aseguradora && <span>{s.aseguradora}</span>}
                     <span>Hecho: {fechaFmt(s.fecha_hecho)}</span>
                     {s.rdo_dominio && <span>Dominio: {s.rdo_dominio}</span>}
                   </div>
@@ -306,9 +313,10 @@ export default function Siniestros({ store }) {
 
   // ── FICHA ──────────────────────────────────────────────────
   const guardado = !!siniestros.find((s) => s.id === ficha.id)
+  const cerrado = (ficha.estado || 'abierto') === 'cerrado'
   const ed = editing
   const docCats = docs.filter((d) => d.siniestro_id === ficha.id).map((d) => d.categoria)
-  
+
   return (
     <div className="sin-wrap">
       <Style />
@@ -340,10 +348,25 @@ export default function Siniestros({ store }) {
         </div>
       )}
 
-      {/* Identificación */}
+      {/* ── Identificación: acá se elige la compañía, una sola vez ── */}
       <Section title="Identificación">
         <Txt label="Nº de siniestro" value={ficha.nro_siniestro} onChange={(v) => set('nro_siniestro', v)} editing={ed} />
-        <Txt label="Compañía" value={ficha.compania} onChange={(v) => set('compania', v)} editing={ed} />
+        <Txt label="CUIT de la compañía" value={ficha.aseg_cuit} onChange={(v) => set('aseg_cuit', v)} editing={ed} />
+
+        <label className="sin-field wide">
+          <span>Compañía de Seguros</span>
+          {ed ? (
+            <>
+              <input list="sin-aseg-list" value={ficha.aseguradora ?? ''}
+                placeholder="Escribí parte del nombre (ej: SANCOR, GALICIA, LA CAJA…)"
+                onChange={(e) => setAseguradora(e.target.value)} />
+              <datalist id="sin-aseg-list">
+                {aseguradoras.map((a) => <option key={a.id} value={a.nombre} />)}
+              </datalist>
+              <em className="sin-hint">Padrón SSN · al elegirla se completan CUIT y contactos guardados</em>
+            </>
+          ) : <div className="sin-ro">{ficha.aseguradora || '—'}</div>}
+        </label>
       </Section>
 
       {/* Requirente */}
@@ -351,8 +374,7 @@ export default function Siniestros({ store }) {
         <Txt label="Nombre" wide value={ficha.req_nombre} onChange={(v) => set('req_nombre', v)} editing={ed} />
         <Txt label="DNI" value={ficha.req_dni} onChange={(v) => set('req_dni', v)} editing={ed} />
         <Txt label="Teléfono" value={ficha.req_telefono} onChange={(v) => set('req_telefono', v)} editing={ed} />
-        
-        {/* Calidad de Tercero (Selector Dropdown) */}
+
         <label className="sin-field">
           <span>Calidad de Tercero</span>
           {ed ? (
@@ -373,8 +395,7 @@ export default function Siniestros({ store }) {
         <Txt label="Fecha del hecho" type="date" value={ficha.fecha_hecho} onChange={(v) => set('fecha_hecho', v)} editing={ed} />
         <Txt label="Hora del hecho" type="time" value={ficha.hora_hecho} onChange={(v) => set('hora_hecho', v)} editing={ed} />
         <Txt label="Lugar del hecho" wide value={ficha.lugar} onChange={(v) => set('lugar', v)} editing={ed} />
-        
-        {/* Espacio reservado para Croquis */}
+
         <div className="sin-field wide">
           <span>Croquis del Hecho</span>
           <div className="sin-croquis-box">
@@ -383,25 +404,10 @@ export default function Siniestros({ store }) {
         </div>
       </Section>
 
-      {/* Datos del Seguro */}
+      {/* Datos del Seguro — la compañía se muestra como eco de Identificación */}
       <Section title="Datos del Seguro">
-        <div className="sin-row-merged wide">
-          <label className="sin-field" style={{ flex: 2 }}>
-            <span>Aseguradora</span>
-            {ed ? (
-              <>
-                <input list="sin-aseg-list" value={ficha.aseguradora ?? ''} placeholder="Compañía de seguros..."
-                  onChange={(e) => setAseguradora(e.target.value)} />
-                <datalist id="sin-aseg-list">
-                  {aseguradoras.map((a) => <option key={a.id} value={a.nombre} />)}
-                </datalist>
-              </>
-            ) : <div className="sin-ro">{ficha.aseguradora || '—'}</div>}
-          </label>
-          <div style={{ flex: 1 }}>
-            <Txt label="CUIT" value={ficha.aseg_cuit} onChange={(v) => set('aseg_cuit', v)} editing={ed} />
-          </div>
-        </div>
+        <Eco label="Compañía de Seguros" value={ficha.aseguradora} nota="cargada en Identificación" />
+        <Eco label="CUIT" value={ficha.aseg_cuit} />
 
         <Bool label="¿Denuncia administrativa?" value={ficha.denuncia_admin} onChange={(v) => set('denuncia_admin', v)} editing={ed} />
         <Txt label="Tel. aseguradora" value={ficha.aseg_telefono} onChange={(v) => set('aseg_telefono', v)} editing={ed} />
@@ -409,12 +415,10 @@ export default function Siniestros({ store }) {
         <Txt label="Domicilio aseguradora" wide value={ficha.aseg_domicilio} onChange={(v) => set('aseg_domicilio', v)} editing={ed} />
         <Txt label="Mail aseguradora" value={ficha.aseg_mail} onChange={(v) => set('aseg_mail', v)} editing={ed} />
 
-        {/* Check Derivado dentro de la misma sección de Seguro */}
         <div className="sin-field wide" style={{ marginTop: '0.5rem', borderTop: '1px solid var(--line)', paddingTop: '1rem' }}>
           <Bool label="¿Derivado?" value={ficha.derivado} onChange={(v) => set('derivado', v)} editing={ed} />
         </div>
 
-        {/* Campos de Derivado si está tildado */}
         {ficha.derivado && (
           <div className="sin-derivado-block wide">
             <Txt label="Estudio Liquidador" value={ficha.derivado_estudio} onChange={(v) => set('derivado_estudio', v)} editing={ed} />
@@ -429,10 +433,9 @@ export default function Siniestros({ store }) {
       <Section title="Lesiones">
         <Bool label="¿Hubo Lesiones?" value={ficha.lesiones} onChange={(v) => {
           set('lesiones', v)
-          if (!v) set('comprobantes_medicos', false) // Reset automático si se destilda
+          if (!v) set('comprobantes_medicos', false)
         }} editing={ed} />
-        
-        {/* Renderizado condicional: solo habilitado si hubo lesiones */}
+
         {ficha.lesiones && (
           <Bool label="¿Adjunta certificados médicos?" value={ficha.comprobantes_medicos} onChange={(v) => set('comprobantes_medicos', v)} editing={ed} />
         )}
@@ -445,7 +448,7 @@ export default function Siniestros({ store }) {
         <Txt label="Nombre" wide value={ficha.rdo_nombre} onChange={(v) => set('rdo_nombre', v)} editing={ed} />
         <Txt label="Vehículo" value={ficha.rdo_vehiculo} onChange={(v) => set('rdo_vehiculo', v)} editing={ed} />
         <Txt label="Dominio" value={ficha.rdo_dominio} onChange={(v) => set('rdo_dominio', v)} editing={ed} />
-        <Txt key="rdo_dni" label="DNI" value={ficha.rdo_dni} onChange={(v) => set('rdo_dni', v)} editing={ed} />
+        <Txt label="DNI" value={ficha.rdo_dni} onChange={(v) => set('rdo_dni', v)} editing={ed} />
         <Txt label="Póliza" value={ficha.rdo_poliza} onChange={(v) => set('rdo_poliza', v)} editing={ed} />
         <Txt label="Teléfono" value={ficha.rdo_telefono} onChange={(v) => set('rdo_telefono', v)} editing={ed} />
         <Txt label="Domicilio" wide value={ficha.rdo_domicilio} onChange={(v) => set('rdo_domicilio', v)} editing={ed} />
@@ -455,20 +458,20 @@ export default function Siniestros({ store }) {
       {/* Mediación */}
       <Section title="Mediación">
         <Bool label="¿Mediación?" value={ficha.mediacion} onChange={(v) => set('mediacion', v)} editing={ed} />
-        
+
         {ficha.mediacion && (
           <>
             <Txt label="Fecha de Mediación" type="date" value={ficha.mediacion_fecha} onChange={(v) => set('mediacion_fecha', v)} editing={ed} />
-            
+
             <label className="sin-field">
               <span>Nombre de la Mediadora</span>
               {ed ? (
                 <>
-                  <input 
-                    list="sin-mediadoras-list" 
-                    value={ficha.mediacion_nombre ?? ''} 
+                  <input
+                    list="sin-mediadoras-list"
+                    value={ficha.mediacion_nombre ?? ''}
                     placeholder="Buscá o cargá mediadora..."
-                    onChange={(e) => handleMediacionSelect(e.target.value)} 
+                    onChange={(e) => handleMediacionSelect(e.target.value)}
                   />
                   <datalist id="sin-mediadoras-list">
                     {mediadoras.map((m) => <option key={m.id} value={m.nombre} />)}
@@ -483,20 +486,20 @@ export default function Siniestros({ store }) {
       {/* Vista médica */}
       <Section title="Vista médica">
         <Bool label="¿Vista médica?" value={ficha.vista_medica} onChange={(v) => set('vista_medica', v)} editing={ed} />
-        
+
         {ficha.vista_medica && (
           <>
             <Txt label="Fecha Vista" type="date" value={ficha.vm_fecha} onChange={(v) => set('vm_fecha', v)} editing={ed} />
-            
+
             <label className="sin-field">
-              <span>Dr. / Especialista (Búsqueda)</span>
+              <span>Dr. / Especialista</span>
               {ed ? (
                 <>
-                  <input 
-                    list="sin-medicos-list" 
-                    value={ficha.vm_dr ?? ''} 
+                  <input
+                    list="sin-medicos-list"
+                    value={ficha.vm_dr ?? ''}
                     placeholder="Escribí para buscar médico..."
-                    onChange={(e) => handleMedicoSelect(e.target.value)} 
+                    onChange={(e) => handleMedicoSelect(e.target.value)}
                   />
                   <datalist id="sin-medicos-list">
                     {medicos.map((m) => <option key={m.id} value={m.nombre} />)}
@@ -512,16 +515,16 @@ export default function Siniestros({ store }) {
         )}
       </Section>
 
-      {/* Presupuesto (Ex Cierre) */}
+      {/* Presupuesto */}
       <Section title="Presupuesto">
         {ed ? (
           <label className="sin-field">
             <span>Monto del presupuesto (Reclamar)</span>
-            <input 
-              type="number" 
-              step="0.01" 
-              value={ficha.monto_presupuesto ?? ''} 
-              onChange={(e) => set('monto_presupuesto', e.target.value)} 
+            <input
+              type="number"
+              step="0.01"
+              value={ficha.monto_presupuesto ?? ''}
+              onChange={(e) => set('monto_presupuesto', e.target.value)}
               placeholder="Ingrese el estimado a reclamar..."
             />
           </label>
@@ -531,6 +534,19 @@ export default function Siniestros({ store }) {
             <div className="sin-ro">{montoFmt(ficha.monto_presupuesto)}</div>
           </label>
         )}
+      </Section>
+
+      {/* Cierre */}
+      <Section title="Cierre">
+        <Bool label="¿Cerrado?" value={cerrado} onChange={(v) => set('estado', v ? 'cerrado' : 'abierto')} editing={ed} />
+        {cerrado && <>
+          <Txt label="Fecha de pago" type="date" value={ficha.fecha_pago} onChange={(v) => set('fecha_pago', v)} editing={ed} />
+          {ed
+            ? <label className="sin-field"><span>Monto cobrado</span>
+                <input type="number" step="0.01" value={ficha.monto_pago ?? ''} onChange={(e) => set('monto_pago', e.target.value)} />
+              </label>
+            : <label className="sin-field"><span>Monto cobrado</span><div className="sin-ro">{montoFmt(ficha.monto_pago)}</div></label>}
+        </>}
       </Section>
 
       {/* Documentación */}
@@ -610,7 +626,7 @@ function Section({ title, children }) {
   )
 }
 
-// ── Estilos (Adiciones para Croquis, Desplegables y Blocks Dinámicos) ──
+// ── Estilos ──
 function Style() {
   return (
     <style>{`
@@ -691,9 +707,10 @@ function Style() {
       outline:none; border-color:var(--g); box-shadow:0 0 0 3px rgba(201,162,75,.15); }
     .sin-field textarea { resize:vertical; line-height:1.5; }
     .sin-select { cursor: pointer; color-scheme: dark; }
+    .sin-hint { font-style:normal; font-size:.62rem; color:var(--muted); opacity:.75; margin-top:.15rem; }
+    .sin-eco-nota { font-style:normal; opacity:.6; text-transform:none; letter-spacing:0; }
 
     /* Estructuras Extras */
-    .sin-row-merged { display: flex; gap: 1rem; align-items: flex-end; }
     .sin-croquis-box { border: 1px dashed var(--input-b); background: rgba(0,0,0,0.15); border-radius: 8px; padding: 2rem; text-align: center; margin-top: 0.2rem; }
     .sin-derivado-block { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.8rem; background: rgba(201,162,75,0.03); border: 1px solid var(--line); border-radius: 8px; padding: 0.8rem; margin-top: 0.5rem; }
 
@@ -701,6 +718,7 @@ function Style() {
     .sin-ro { color:var(--ro); font-size:.9rem; padding:.5rem .1rem; min-height:1.2rem;
       border-bottom:1px solid var(--line); }
     .sin-ro.multi { white-space:pre-wrap; line-height:1.5; }
+    .sin-ro.eco { color:var(--g); border-bottom-style:dotted; }
 
     .sin-sino { display:inline-flex; border:1px solid var(--input-b); border-radius:8px; overflow:hidden; width:fit-content; }
     .sin-sino button { background:var(--input); border:none; color:var(--muted); padding:.45rem 1.1rem; cursor:pointer; font-family:inherit; font-size:.82rem; }
