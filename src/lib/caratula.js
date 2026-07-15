@@ -91,13 +91,13 @@ function construirCaratula(s) {
 // ╚══════════════════════════════════════════════════════════════╝
 function construirFormulario(s, docCats = []) {
   const has = (k) => docCats.includes(k)
-  const cerrado = (s.estado || 'abierto') === 'cerrado'
+  const tipoMovilidad = s.req_rol || s.rdo_vehiculo || s.vehiculo || '';
   
-  // Estilos base optimizados para mayor legibilidad (13px) sin desbordar A4
+  // Estilos base sin subrayados
   const box = 'border:1.5px solid #000; padding:10px 12px; margin-bottom:10px; box-sizing:border-box;'
   const titleBox = 'font-size:13px; font-weight:bold; text-transform:uppercase; border-bottom:1px solid #000; padding-bottom:4px; margin-bottom:8px; color:#111;'
   const line = 'font-size:13px; line-height:1.8; color:#000;'
-  const u = (v) => `<span style="border-bottom:1px solid #888; padding:0 4px; font-weight:bold; font-size:13px;">${val(v)}</span>`
+  const u = (v) => `<span style="padding:0 2px; font-weight:bold; font-size:13px;">${val(v)}</span>`
 
   return `
 <div class="frm-doc" style="${F}width:720px; box-sizing:border-box; margin:0 auto; background:#fff; color:#000; padding:30px 35px; font-size:13px;">
@@ -111,8 +111,8 @@ function construirFormulario(s, docCats = []) {
   <!-- BLOQUE DESTACADO: Identificadores Principales -->
   <div style="${box} background:#fcfcfc; border-width:2px;">
     <div style="display:flex; justify-content:space-between; font-size:16px; font-weight:bold; line-height:1.4;">
-      <div>SINIESTRO N°: <span style="font-size:17px; color:#000; text-decoration:underline;">${val(s.nro_siniestro)}</span></div>
-      <div>COMPAÑÍA: <span style="font-size:17px; color:#000; text-decoration:underline;">${val(s.compania || s.aseguradora)}</span></div>
+      <div>SINIESTRO N°: <span>${val(s.nro_siniestro)}</span></div>
+      <div>COMPAÑÍA: <span>${val(s.compania || s.aseguradora)}</span></div>
     </div>
   </div>
 
@@ -121,6 +121,7 @@ function construirFormulario(s, docCats = []) {
     <div style="${titleBox}">Datos del Requirente</div>
     <div style="${line}">NOMBRE Y APELLIDO: ${u(s.req_nombre)}</div>
     <div style="${line}">DNI: ${u(s.req_dni)} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; TELÉFONO: ${u(s.req_telefono)}</div>
+    <div style="${line}">CALIDAD DEL TERCERO: ${u(tipoMovilidad)}</div>
   </div>
 
   <!-- Bloque 2: El Hecho -->
@@ -156,12 +157,13 @@ function construirFormulario(s, docCats = []) {
 
   <!-- Bloque 5: Vista Médica -->
   <div style="${box}">
+    <div style="${titleBox}">Vista Médica</div>
     <div style="${line}">VISTA MÉDICA: ${sino(s.vista_medica)} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; FECHA: ${u(fF(s.vm_fecha))} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; PROFESIONAL INTERVENIENTE: ${u(s.vm_dr)}</div>
     <div style="${line}">DOMICILIO / TEL. VISTA: ${u(s.vm_domicilio)} &nbsp;/&nbsp; ${u(s.vm_telefono)}</div>
   </div>
 
   <!-- Bloque 6: Checkbox Documentación -->
-  <div style="border:1.5px dashed #000; padding:10px 12px; margin-bottom:10px; ${line} background:#fafafa;">
+  <div style="border:1.5px dashed #000; padding:10px 12px; ${line} background:#fafafa;">
     <strong>DOCUMENTACIÓN ADJUNTADA:</strong><br>
     <div style="margin-top:5px; display:flex; justify-content:space-between; flex-wrap:wrap;">
       <div>DNI ${chk(has('DNI'))}</div>
@@ -173,13 +175,6 @@ function construirFormulario(s, docCats = []) {
       <div>CERT. COB. ${chk(has('CERT_COB'))}</div>
       <div>PRESUPUESTO ${chk(has('PRESUPUESTO'))}</div>
     </div>
-  </div>
-
-  <!-- Bloque de Cierre -->
-  <div style="${line} padding: 5px 2px;">
-    ¿ESTADO CERRADO?: ${sino(cerrado)} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 
-    FECHA DE PAGO: ${u(fF(s.fecha_pago))} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 
-    MONTO INDEMNIZADO: <span style="font-size:14px; font-weight:bold;">$ ${u(s.monto_pago != null && s.monto_pago !== '' ? Number(s.monto_pago).toLocaleString('es-AR') : '')}</span>
   </div>
 
 </div>`
