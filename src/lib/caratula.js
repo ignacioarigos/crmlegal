@@ -34,25 +34,31 @@ const sino = (v) => `${chk(!!v)}&nbsp;Sí&nbsp;&nbsp;${chk(!v)}&nbsp;No`
 // ║  CARÁTULA (tapa de carpeta) — A4                              ║
 // ╚══════════════════════════════════════════════════════════════╝
 function construirCaratula(s) {
-  const cerrado = (s.estado || 'abierto') === 'cerrado'
   const dom = MIS_DATOS.domicilios[MIS_DATOS.defaultTribunal]
-  const pares = [
-    ['Nº de siniestro', val(s.nro_siniestro)],
-    ['Compañía',        val(s.compania)],
-    ['Fecha del hecho', fF(s.fecha_hecho)],
-    ['Aseguradora',     val(s.aseguradora)],
-    ['DNI requirente',  val(s.req_dni)],
-    ['Teléfono',        val(s.req_telefono)],
-    ['Dominio contrario', val(s.rdo_dominio)],
-    ['Póliza',          val(s.rdo_poliza)],
+
+  // Estructura lineal de datos para la carátula
+  const items = [
+    { label: 'N° de Siniestro', value: val(s.nro_siniestro) },
+    { label: 'Fecha',           value: fF(s.fecha_hecho) },
+    { label: 'Lugar',           value: val(s.lugar) },
+    { label: 'Dominio',         value: val(s.rdo_dominio) },
+    { label: 'Requerido',       value: val(s.rdo_nombre) }
   ]
-  let filas = ''
-  for (let i = 0; i < pares.length; i += 2) {
-    const cel = (p) => p ? `<td style="${F}width:50%;padding:9px 12px;vertical-align:top;border:1px solid #000;">
-        <div style="font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:#555;">${p[0]}</div>
-        <div style="font-size:14px;font-weight:bold;margin-top:3px;">${p[1]}</div></td>` : '<td style="border:1px solid #000;"></td>'
-    filas += `<tr>${cel(pares[i])}${cel(pares[i + 1])}</tr>`
-  }
+
+  // Mapeamos los datos en una sola columna con respuestas alineadas sin bordes
+  let filasDatos = ''
+  items.forEach(item => {
+    filasDatos += `
+      <div style="display: flex; padding: 10px 0; font-size: 14px; line-height: 1.4;">
+        <div style="width: 160px; font-weight: bold; text-transform: uppercase; font-size: 11px; letter-spacing: .05em; color: #555; display: flex; align-items: center;">
+          ${item.label}:
+        </div>
+        <div style="flex-grow: 1; font-weight: bold; color: #000;">
+          ${item.value}
+        </div>
+      </div>
+    `
+  })
 
   return `
 <div class="crt-doc" style="${F}width:720px;margin:0 auto;background:#fff;color:#000;padding:34px 40px;">
@@ -65,21 +71,22 @@ function construirCaratula(s) {
   <div style="text-align:center;margin:36px 0 10px;">
     <div style="font-size:13px;letter-spacing:.3em;color:#666;">CARPETA DE SINIESTRO N°</div>
     <div style="font-size:104px;font-weight:bold;line-height:1;margin-top:4px;">${carpetaFmt(s.carpeta_nro)}</div>
-    <div style="display:inline-block;margin-top:10px;font-size:10px;letter-spacing:.15em;text-transform:uppercase;padding:3px 14px;border:1px solid #000;">
-      ${cerrado ? 'CERRADO' : 'EN TRÁMITE'}
-    </div>
   </div>
 
   <div style="border-top:1px solid #000;border-bottom:1px solid #000;padding:20px 10px;margin:28px 0;text-align:center;">
     <div style="font-size:22px;font-weight:bold;">${val(s.req_nombre)}</div>
     <div style="font-size:13px;color:#666;margin:8px 0;">c /</div>
-    <div style="font-size:22px;font-weight:bold;">${val(s.rdo_nombre)}</div>
+    <!-- C/ Aseguradora asignado dinámicamente -->
+    <div style="font-size:22px;font-weight:bold;">${val(s.aseguradora)}</div>
     <div style="font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:#666;margin-top:12px;">s / Siniestro</div>
   </div>
 
-  <table style="width:100%;border-collapse:collapse;margin-top:20px;">${filas}</table>
+  <!-- Nueva sección de datos lineal sin bordes -->
+  <div style="margin-top:30px; padding: 0 10px;">
+    ${filasDatos}
+  </div>
 
-  <div style="text-align:center;margin-top:40px;font-size:10px;color:#555;line-height:1.6;">
+  <div style="text-align:center;margin-top:60px;font-size:10px;color:#555;line-height:1.6;">
     ${dom.dir}<br>Carátula generada el ${fmtF(new Date().toISOString().slice(0, 10))}
   </div>
 
