@@ -3,6 +3,7 @@ import { uid } from '../lib/supabase.js'
 import {
   saveSiniestro, deleteSiniestro,
   uploadDoc, getDocUrl, deleteDoc,
+  findAseguradora, syncAseguradora,
 } from '../lib/store.js'
 import { imprimirCaratula, imprimirFormulario } from '../lib/caratula.js'
 
@@ -94,6 +95,7 @@ function Bool({ label, value, onChange, editing }) {
 export default function Siniestros({ store }) {
   const siniestros = store.siniestros || []
   const docs = store.siniestro_docs || []
+  const aseguradoras = store.aseguradoras || []
 
   const [view, setView] = useState('list')       // 'list' | 'ficha'
   const [ficha, setFicha] = useState(null)
@@ -106,6 +108,21 @@ export default function Siniestros({ store }) {
   const [q, setQ] = useState('')
 
   const set = (k, v) => setFicha((f) => ({ ...f, [k]: v }))
+
+  // Al elegir/escribir una aseguradora conocida, autocompleta los contactos vacíos
+  const setAseguradora = (v) => {
+    setFicha((f) => {
+      const next = { ...f, aseguradora: v }
+      const known = findAseguradora(v)
+      if (known) {
+        if (!next.aseg_telefono && known.telefono)   next.aseg_telefono  = known.telefono
+        if (!next.aseg_domicilio && known.domicilio) next.aseg_domicilio = known.domicilio
+        if (!next.aseg_contacto && known.contacto)   next.aseg_contacto  = known.contacto
+        if (!next.aseg_mail && known.mail)           next.aseg_mail      = known.mail
+      }
+      return next
+    })
+  }
 
   const abrirNuevo = () => { setFicha(blank()); setEditing(true); setView('ficha') }
   const abrirExistente = (s) => { setFicha({ ...s }); setEditing(false); setView('ficha') }
@@ -128,6 +145,17 @@ export default function Siniestros({ store }) {
         clean.monto_pago = Number.isFinite(n) ? n : null
       }
       const saved = await saveSiniestro(clean)
+
+      // memoria: guarda/completa los datos de esta aseguradora para las próximas
+      try {
+        await syncAseguradora(clean.aseguradora, {
+          telefono:  clean.aseg_telefono,
+          domicilio: clean.aseg_domicilio,
+          contacto:  clean.aseg_contacto,
+          mail:      clean.aseg_mail,
+        })
+      } catch {}
+
       setFicha((f) => ({ ...f, carpeta_nro: saved.carpeta_nro }))
       setEditing(false)
       setSnapshot(null)
@@ -275,7 +303,20 @@ export default function Siniestros({ store }) {
         <Bool label="¿Lesiones?" value={ficha.lesiones} onChange={(v) => set('lesiones', v)} editing={ed} />
         <Bool label="¿Comprobantes médicos?" value={ficha.comprobantes_medicos} onChange={(v) => set('comprobantes_medicos', v)} editing={ed} />
         <Bool label="¿Denuncia administrativa?" value={ficha.denuncia_admin} onChange={(v) => set('denuncia_admin', v)} editing={ed} />
-        <Txt label="Aseguradora" wide value={ficha.aseguradora} onChange={(v) => set('aseguradora', v)} editing={ed} />
+
+        <label className="sin-field wide">
+          <span>Aseguradora</span>
+          {ed ? (
+            <>
+              <input list="sin-aseg-list" value={ficha.aseguradora ?? ''} placeholder="Escribí o elegí de la lista…"
+                onChange={(e) => setAseguradora(e.target.value)} />
+              <datalist id="sin-aseg-list">
+                {aseguradoras.map((a) => <option key={a.id} value={a.nombre} />)}
+              </datalist>
+            </>
+          ) : <div className="sin-ro">{ficha.aseguradora || '—'}</div>}
+        </label>
+
         <Txt label="Tel. aseguradora" value={ficha.aseg_telefono} onChange={(v) => set('aseg_telefono', v)} editing={ed} />
         <Txt label="Contacto aseguradora" value={ficha.aseg_contacto} onChange={(v) => set('aseg_contacto', v)} editing={ed} />
         <Txt label="Domicilio aseguradora" wide value={ficha.aseg_domicilio} onChange={(v) => set('aseg_domicilio', v)} editing={ed} />
