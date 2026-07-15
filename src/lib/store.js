@@ -289,7 +289,7 @@ export function findAseguradora(nombre) {
 // solo los campos de contacto que estén vacíos (no pisa lo ya cargado).
 export async function syncAseguradora(nombre, datos = {}) {
   if (!nombre || !nombre.trim()) return
-  const campos = ['telefono', 'domicilio', 'contacto', 'mail']
+  const campos = ['telefono', 'domicilio', 'contacto', 'mail', 'cuit']
   const found = findAseguradora(nombre)
   if (found) {
     const patch = {}
