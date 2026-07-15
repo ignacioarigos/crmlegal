@@ -34,30 +34,29 @@ const sino = (v) => `${chk(!!v)}&nbsp;Sí&nbsp;&nbsp;${chk(!v)}&nbsp;No`
 // ║  CARÁTULA (tapa de carpeta) — A4                              ║
 // ╚══════════════════════════════════════════════════════════════╝
 function construirCaratula(s) {
-  // Mapeo dinámico del nuevo campo de movilidad / rol en el hecho
-  // Busca en s.req_rol, s.rdo_vehiculo o s.vehiculo. Podés adaptar este nombre de campo cuando lo crees en Supabase.
+  // Mapeo dinámico del campo de movilidad/rol
   const tipoMovilidad = s.req_rol || s.rdo_vehiculo || s.vehiculo || '';
 
-  // Lista de datos principales optimizada en formato lineal
+  // Lista de datos optimizada en orden lógico y con nuevo nombre
   const items = [
-    { label: 'N° de Siniestro',  value: val(s.nro_siniestro) },
-    { label: 'Compañía / Aseg.', value: val(s.aseguradora || s.compania) },
-    { label: 'Fecha del Hecho',  value: fF(s.fecha_hecho) },
-    { label: 'Lugar',            value: val(s.lugar) },
-    { label: 'Dominio Reclamado', value: val(s.rdo_dominio) },
-    { label: 'Movilidad / Rol',  value: val(tipoMovilidad) },
-    { label: 'Requerido',        value: val(s.rdo_nombre) }
+    { label: 'N° de Siniestro',     value: val(s.nro_siniestro) },
+    { label: 'Compañía / Aseg.',    value: val(s.aseguradora || s.compania) },
+    { label: 'Calidad del Tercero', value: val(tipoMovilidad) },
+    { label: 'Fecha del Hecho',     value: fF(s.fecha_hecho) },
+    { label: 'Lugar',               value: val(s.lugar) },
+    { label: 'Dominio Reclamado',   value: val(s.rdo_dominio) },
+    { label: 'Requerido',           value: val(s.rdo_nombre) }
   ]
 
-  // Generación del bloque de datos con amplios márgenes para balancear la hoja A4
+  // Filas compactadas (padding 10px) para blindar el diseño contra desbordes de página
   let filasDatos = ''
   items.forEach(item => {
     filasDatos += `
-      <div style="display: flex; padding: 16px 0; border-bottom: 1px dashed #e0e0e0; line-height: 1.5;">
+      <div style="display: flex; padding: 10px 0; border-bottom: 1px dashed #e0e0e0; line-height: 1.4;">
         <div style="width: 180px; font-weight: bold; text-transform: uppercase; font-size: 11px; letter-spacing: .08em; color: #666; display: flex; align-items: center; padding-right: 10px;">
           ${item.label}:
         </div>
-        <div style="flex-grow: 1; font-size: 16px; font-weight: bold; color: #000; letter-spacing: .02em;">
+        <div style="flex-grow: 1; font-size: 15px; font-weight: bold; color: #000; letter-spacing: .02em;">
           ${item.value}
         </div>
       </div>
@@ -65,36 +64,36 @@ function construirCaratula(s) {
   })
 
   return `
-<div class="crt-doc" style="${F}width:720px; min-height:960px; margin:0 auto; background:#fff; color:#000; padding:50px 55px; display: flex; flex-direction: column; justify-content: space-between;">
+<div class="crt-doc" style="${F}width:720px; box-sizing:border-box; margin:0 auto; background:#fff; color:#000; padding:45px 50px 30px; display: flex; flex-direction: column; justify-content: space-between;">
 
   <div>
     <!-- Encabezado del Estudio Jurídico -->
-    <div style="text-align:center; border-bottom:3px solid #000; padding-bottom:18px;">
-      <div style="font-size:26px; font-weight:bold; letter-spacing:.06em;">IA&nbsp;&nbsp;|&nbsp;&nbsp;${MIS_DATOS.nombre.toUpperCase()}</div>
+    <div style="text-align:center; border-bottom:3px solid #000; padding-bottom:15px;">
+      <div style="font-size:25px; font-weight:bold; letter-spacing:.06em;">IA&nbsp;&nbsp;|&nbsp;&nbsp;${MIS_DATOS.nombre.toUpperCase()}</div>
       <div style="font-size:12px; letter-spacing:.3em; text-transform:uppercase; color:#333; margin-top:5px; font-weight: bold;">${MIS_DATOS.subtitulo || ''}</div>
     </div>
 
-    <!-- Bloque Central de Identificación de Carpeta -->
-    <div style="text-align:center; margin:55px 0 20px;">
-      <div style="font-size:14px; letter-spacing:.35em; color:#555; font-weight: 500;">CARPETA DE SINIESTRO N°</div>
-      <div style="font-size:115px; font-weight:bold; line-height:1; margin-top:8px; letter-spacing:-0.03em;">${carpetaFmt(s.carpeta_nro)}</div>
+    <!-- Bloque Central de Identificación -->
+    <div style="text-align:center; margin:40px 0 15px;">
+      <div style="font-size:13px; letter-spacing:.35em; color:#555; font-weight: 500;">CARPETA DE SINIESTRO N°</div>
+      <div style="font-size:110px; font-weight:bold; line-height:1; margin-top:5px; letter-spacing:-0.03em;">${carpetaFmt(s.carpeta_nro)}</div>
     </div>
 
-    <!-- Bloque de Partes Involucradas (Rediseño Limpio sin S/Siniestro) -->
-    <div style="border-top:1.5px solid #000; border-bottom:1.5px solid #000; padding:26px 15px; margin:40px 0; text-align:center; background: #fafafa;">
-      <div style="font-size:24px; font-weight:bold; color:#000; letter-spacing: .02em;">${val(s.req_nombre)}</div>
-      <div style="font-size:14px; font-weight:bold; text-transform:uppercase; color:#777; margin:12px 0; letter-spacing: .2em;">c /</div>
-      <div style="font-size:24px; font-weight:bold; color:#000; letter-spacing: .02em;">${val(s.aseguradora || s.compania)}</div>
+    <!-- Bloque de Partes Involucradas -->
+    <div style="border-top:1.5px solid #000; border-bottom:1.5px solid #000; padding:22px 15px; margin:30px 0; text-align:center; background: #fafafa;">
+      <div style="font-size:23px; font-weight:bold; color:#000; letter-spacing: .02em;">${val(s.req_nombre)}</div>
+      <div style="font-size:13px; font-weight:bold; text-transform:uppercase; color:#777; margin:10px 0; letter-spacing: .2em;">c /</div>
+      <div style="font-size:23px; font-weight:bold; color:#000; letter-spacing: .02em;">${val(s.aseguradora || s.compania)}</div>
     </div>
 
-    <!-- Listado Técnico Estilo Ficha de una sola Columna -->
-    <div style="margin-top:40px; padding: 0 5px;">
+    <!-- Listado Técnico -->
+    <div style="margin-top:30px; padding: 0 5px;">
       ${filasDatos}
     </div>
   </div>
 
-  <!-- Pie de Página Minimalista (Solo la fecha técnica de emisión) -->
-  <div style="text-align:center; margin-top:60px; font-size:10px; color:#777; letter-spacing: .05em; border-top: 1px solid #eee; padding-top: 15px;">
+  <!-- Pie de Página Fijo en la misma Hoja -->
+  <div style="text-align:center; margin-top:50px; font-size:10px; color:#777; letter-spacing: .05em; border-top: 1px solid #eee; padding-top: 12px;">
     Documento de control interno • Generado el ${fmtF(new Date().toISOString().slice(0, 10))}
   </div>
 
@@ -157,7 +156,7 @@ function construirFormulario(s, docCats = []) {
 </div>`
 }
 
-// ── Generación / descarga (patrón idéntico a recibo.js) ──
+// ── Generación / descarga ──
 async function generar(html, filename, selector) {
   try {
     const html2pdf = await loadHtml2Pdf()
@@ -168,7 +167,7 @@ async function generar(html, filename, selector) {
     await waitImages(host)
     try {
       await html2pdf().set({
-        margin: 8,
+        margin: 0, // Ajustado a 0 ya que el contenedor maneja sus propios paddings de imprenta
         filename,
         image: { type: 'jpeg', quality: 0.98 },
         html2canvas: { scale: 3, backgroundColor: '#ffffff', useCORS: true, imageTimeout: 15000 },
@@ -182,7 +181,7 @@ async function generar(html, filename, selector) {
     const w = window.open('', '_blank')
     if (!w) { alert('No se pudo generar el PDF. Permití las ventanas emergentes.'); return }
     w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${filename}</title>
-      <style>@page{size:A4;margin:8mm}body{margin:0}</style></head><body>${html}</body></html>`)
+      <style>@page{size:A4;margin:0mm}body{margin:0}</style></head><body>${html}</body></html>`)
     w.document.close()
     setTimeout(() => { w.focus(); w.print() }, 400)
   }
