@@ -6,6 +6,7 @@ let _state = {
   tareas: [], causas: [], registros: [], gastos: [],
   eventos: [], tramites: [], cobros: [],
   siniestros: [], siniestro_docs: [], aseguradoras: [],
+  siniestro_novedades: [], siniestro_ofertas: [],
   loaded: false,
 }
 let _listeners = []
@@ -47,18 +48,23 @@ export async function loadAll() {
     _state.tramites = tr
   }
 
-  // Siniestros + aseguradoras (defensivo: no debe romper loadAll si falla)
+  // Módulo Siniestros (defensivo: no debe romper loadAll si falla)
   try {
-    const [s, sd, ag] = await Promise.all([
+    const [s, sd, ag, nv, of] = await Promise.all([
       DB.get('crm_siniestros'), DB.get('crm_siniestro_docs'), DB.get('crm_aseguradoras'),
+      DB.get('crm_siniestro_novedades'), DB.get('crm_siniestro_ofertas'),
     ])
-    _state.siniestros     = s  || []
-    _state.siniestro_docs = sd || []
-    _state.aseguradoras   = ag || []
+    _state.siniestros          = s  || []
+    _state.siniestro_docs      = sd || []
+    _state.aseguradoras        = ag || []
+    _state.siniestro_novedades = nv || []
+    _state.siniestro_ofertas   = of || []
   } catch {
-    _state.siniestros     = _state.siniestros || []
-    _state.siniestro_docs = _state.siniestro_docs || []
-    _state.aseguradoras   = _state.aseguradoras || []
+    _state.siniestros          = _state.siniestros || []
+    _state.siniestro_docs      = _state.siniestro_docs || []
+    _state.aseguradoras        = _state.aseguradoras || []
+    _state.siniestro_novedades = _state.siniestro_novedades || []
+    _state.siniestro_ofertas   = _state.siniestro_ofertas || []
   }
 
   _state.loaded = true
@@ -239,6 +245,9 @@ export async function deleteSiniestro(id) {
   for (const d of docs) { try { await deleteDoc(d.id, d.storage_path) } catch {} }
   await DB.delete('crm_siniestros', id)
   _state.siniestros = _state.siniestros.filter(x => x.id !== id)
+  // las novedades y ofertas caen solas por el ON DELETE CASCADE
+  _state.siniestro_novedades = _state.siniestro_novedades.filter(n => n.siniestro_id !== id)
+  _state.siniestro_ofertas   = _state.siniestro_ofertas.filter(o => o.siniestro_id !== id)
   notify()
 }
 
@@ -302,6 +311,58 @@ export async function syncAseguradora(nombre, datos = {}) {
     for (const k of campos) if (datos[k]) row[k] = datos[k]
     await DB.insert('crm_aseguradoras', row)
     _state.aseguradoras = [..._state.aseguradoras, row]
+  }
+  notify()
+}
+
+// ── Seguimiento: novedades del siniestro ──────────────────────
+export async function saveNovedad(obj) {
+  const exists = _state.siniestro_novedades.find(x => x.id === obj.id)
+  if (exists) {
+    await DB.update('crm_siniestro_novedades', obj.id, obj)
+    _state.siniestro_novedades = _state.siniestro_novedades.map(x => x.id === obj.id ? obj : x)
+  } else {
+    await DB.insert('crm_siniestro_novedades', obj)
+    _state.siniestro_novedades = [..._state.siniestro_novedades, obj]
+  }
+  notify()
+  return obj
+}
+
+export async function deleteNovedad(id) {
+  await DB.delete('crm_siniestro_novedades', id)
+  _state.siniestro_novedades = _state.siniestro_novedades.filter(x => x.id !== id)
+  notify()
+}
+
+// ── Cierre: ofertas y contraofertas ───────────────────────────
+export async function saveOferta(obj) {
+  const exists = _state.siniestro_ofertas.find(x => x.id === obj.id)
+  if (exists) {
+    await DB.update('crm_siniestro_ofertas', obj.id, obj)
+    _state.siniestro_ofertas = _state.siniestro_ofertas.map(x => x.id === obj.id ? obj : x)
+  } else {
+    await DB.insert('crm_siniestro_ofertas', obj)
+    _state.siniestro_ofertas = [..._state.siniestro_ofertas, obj]
+  }
+  notify()
+  return obj
+}
+
+export async function deleteOferta(id) {
+  await DB.delete('crm_siniestro_ofertas', id)
+  _state.siniestro_ofertas = _state.siniestro_ofertas.filter(x => x.id !== id)
+  notify()
+}
+
+// Marca una oferta como aceptada y desmarca el resto del mismo siniestro
+export async function aceptarOferta(siniestroId, ofertaId) {
+  const mias = _state.siniestro_ofertas.filter(o => o.siniestro_id === siniestroId)
+  for (const o of mias) {
+    const debe = o.id === ofertaId
+    if (!!o.aceptada === debe) continue
+    await DB.update('crm_siniestro_ofertas', o.id, { aceptada: debe })
+    _state.siniestro_ofertas = _state.siniestro_ofertas.map(x => x.id === o.id ? { ...x, aceptada: debe } : x)
   }
   notify()
 }
