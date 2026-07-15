@@ -25,8 +25,8 @@ function waitImages(root) {
 
 // ── helpers de formato ──
 const carpetaFmt = (n) => (n == null ? '—' : String(n).padStart(3, '0'))
-const val = (v) => (v == null || v === '') ? '&nbsp;' : String(v)
-const fF  = (s) => s ? fmtF(s) : '&nbsp;'
+const val = (v) => (v == null || v === '') ? '—' : String(v)
+const fF  = (s) => s ? fmtF(s) : '—'
 const chk = (on) => `<span style="display:inline-block;width:11px;height:11px;border:1px solid #000;text-align:center;line-height:10px;font-size:11px;vertical-align:middle;">${on ? '×' : '&nbsp;'}</span>`
 const sino = (v) => `${chk(!!v)}&nbsp;Sí&nbsp;&nbsp;${chk(!v)}&nbsp;No`
 
@@ -34,26 +34,30 @@ const sino = (v) => `${chk(!!v)}&nbsp;Sí&nbsp;&nbsp;${chk(!v)}&nbsp;No`
 // ║  CARÁTULA (tapa de carpeta) — A4                              ║
 // ╚══════════════════════════════════════════════════════════════╝
 function construirCaratula(s) {
-  const dom = MIS_DATOS.domicilios[MIS_DATOS.defaultTribunal]
+  // Mapeo dinámico del nuevo campo de movilidad / rol en el hecho
+  // Busca en s.req_rol, s.rdo_vehiculo o s.vehiculo. Podés adaptar este nombre de campo cuando lo crees en Supabase.
+  const tipoMovilidad = s.req_rol || s.rdo_vehiculo || s.vehiculo || '';
 
-  // Estructura lineal de datos para la carátula
+  // Lista de datos principales optimizada en formato lineal
   const items = [
-    { label: 'N° de Siniestro', value: val(s.nro_siniestro) },
-    { label: 'Fecha',           value: fF(s.fecha_hecho) },
-    { label: 'Lugar',           value: val(s.lugar) },
-    { label: 'Dominio',         value: val(s.rdo_dominio) },
-    { label: 'Requerido',       value: val(s.rdo_nombre) }
+    { label: 'N° de Siniestro',  value: val(s.nro_siniestro) },
+    { label: 'Compañía / Aseg.', value: val(s.aseguradora || s.compania) },
+    { label: 'Fecha del Hecho',  value: fF(s.fecha_hecho) },
+    { label: 'Lugar',            value: val(s.lugar) },
+    { label: 'Dominio Reclamado', value: val(s.rdo_dominio) },
+    { label: 'Movilidad / Rol',  value: val(tipoMovilidad) },
+    { label: 'Requerido',        value: val(s.rdo_nombre) }
   ]
 
-  // Mapeamos los datos en una sola columna con respuestas alineadas sin bordes
+  // Generación del bloque de datos con amplios márgenes para balancear la hoja A4
   let filasDatos = ''
   items.forEach(item => {
     filasDatos += `
-      <div style="display: flex; padding: 10px 0; font-size: 14px; line-height: 1.4;">
-        <div style="width: 160px; font-weight: bold; text-transform: uppercase; font-size: 11px; letter-spacing: .05em; color: #555; display: flex; align-items: center;">
+      <div style="display: flex; padding: 16px 0; border-bottom: 1px dashed #e0e0e0; line-height: 1.5;">
+        <div style="width: 180px; font-weight: bold; text-transform: uppercase; font-size: 11px; letter-spacing: .08em; color: #666; display: flex; align-items: center; padding-right: 10px;">
           ${item.label}:
         </div>
-        <div style="flex-grow: 1; font-weight: bold; color: #000;">
+        <div style="flex-grow: 1; font-size: 16px; font-weight: bold; color: #000; letter-spacing: .02em;">
           ${item.value}
         </div>
       </div>
@@ -61,33 +65,37 @@ function construirCaratula(s) {
   })
 
   return `
-<div class="crt-doc" style="${F}width:720px;margin:0 auto;background:#fff;color:#000;padding:34px 40px;">
+<div class="crt-doc" style="${F}width:720px; min-height:960px; margin:0 auto; background:#fff; color:#000; padding:50px 55px; display: flex; flex-direction: column; justify-content: space-between;">
 
-  <div style="text-align:center;border-bottom:2px solid #000;padding-bottom:14px;">
-    <div style="font-size:22px;font-weight:bold;letter-spacing:.04em;">IA&nbsp;&nbsp;|&nbsp;&nbsp;${MIS_DATOS.nombre.toUpperCase()}</div>
-    <div style="font-size:11px;letter-spacing:.25em;text-transform:uppercase;color:#333;margin-top:3px;">${MIS_DATOS.subtitulo || ''}</div>
+  <div>
+    <!-- Encabezado del Estudio Jurídico -->
+    <div style="text-align:center; border-bottom:3px solid #000; padding-bottom:18px;">
+      <div style="font-size:26px; font-weight:bold; letter-spacing:.06em;">IA&nbsp;&nbsp;|&nbsp;&nbsp;${MIS_DATOS.nombre.toUpperCase()}</div>
+      <div style="font-size:12px; letter-spacing:.3em; text-transform:uppercase; color:#333; margin-top:5px; font-weight: bold;">${MIS_DATOS.subtitulo || ''}</div>
+    </div>
+
+    <!-- Bloque Central de Identificación de Carpeta -->
+    <div style="text-align:center; margin:55px 0 20px;">
+      <div style="font-size:14px; letter-spacing:.35em; color:#555; font-weight: 500;">CARPETA DE SINIESTRO N°</div>
+      <div style="font-size:115px; font-weight:bold; line-height:1; margin-top:8px; letter-spacing:-0.03em;">${carpetaFmt(s.carpeta_nro)}</div>
+    </div>
+
+    <!-- Bloque de Partes Involucradas (Rediseño Limpio sin S/Siniestro) -->
+    <div style="border-top:1.5px solid #000; border-bottom:1.5px solid #000; padding:26px 15px; margin:40px 0; text-align:center; background: #fafafa;">
+      <div style="font-size:24px; font-weight:bold; color:#000; letter-spacing: .02em;">${val(s.req_nombre)}</div>
+      <div style="font-size:14px; font-weight:bold; text-transform:uppercase; color:#777; margin:12px 0; letter-spacing: .2em;">c /</div>
+      <div style="font-size:24px; font-weight:bold; color:#000; letter-spacing: .02em;">${val(s.aseguradora || s.compania)}</div>
+    </div>
+
+    <!-- Listado Técnico Estilo Ficha de una sola Columna -->
+    <div style="margin-top:40px; padding: 0 5px;">
+      ${filasDatos}
+    </div>
   </div>
 
-  <div style="text-align:center;margin:36px 0 10px;">
-    <div style="font-size:13px;letter-spacing:.3em;color:#666;">CARPETA DE SINIESTRO N°</div>
-    <div style="font-size:104px;font-weight:bold;line-height:1;margin-top:4px;">${carpetaFmt(s.carpeta_nro)}</div>
-  </div>
-
-  <div style="border-top:1px solid #000;border-bottom:1px solid #000;padding:20px 10px;margin:28px 0;text-align:center;">
-    <div style="font-size:22px;font-weight:bold;">${val(s.req_nombre)}</div>
-    <div style="font-size:13px;color:#666;margin:8px 0;">c /</div>
-    <!-- C/ Aseguradora asignado dinámicamente -->
-    <div style="font-size:22px;font-weight:bold;">${val(s.aseguradora)}</div>
-    <div style="font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:#666;margin-top:12px;">s / Siniestro</div>
-  </div>
-
-  <!-- Nueva sección de datos lineal sin bordes -->
-  <div style="margin-top:30px; padding: 0 10px;">
-    ${filasDatos}
-  </div>
-
-  <div style="text-align:center;margin-top:60px;font-size:10px;color:#555;line-height:1.6;">
-    ${dom.dir}<br>Carátula generada el ${fmtF(new Date().toISOString().slice(0, 10))}
+  <!-- Pie de Página Minimalista (Solo la fecha técnica de emisión) -->
+  <div style="text-align:center; margin-top:60px; font-size:10px; color:#777; letter-spacing: .05em; border-top: 1px solid #eee; padding-top: 15px;">
+    Documento de control interno • Generado el ${fmtF(new Date().toISOString().slice(0, 10))}
   </div>
 
 </div>`
