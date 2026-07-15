@@ -27,17 +27,15 @@ function waitImages(root) {
 const carpetaFmt = (n) => (n == null ? '—' : String(n).padStart(3, '0'))
 const val = (v) => (v == null || v === '') ? '—' : String(v)
 const fF  = (s) => s ? fmtF(s) : '—'
-const chk = (on) => `<span style="display:inline-block;width:11px;height:11px;border:1px solid #000;text-align:center;line-height:10px;font-size:11px;vertical-align:middle;">${on ? '×' : '&nbsp;'}</span>`
+const chk = (on) => `<span style="display:inline-block;width:12px;height:12px;border:1px solid #000;text-align:center;line-height:11px;font-size:11px;vertical-align:middle;font-weight:bold;">${on ? '×' : '&nbsp;'}</span>`
 const sino = (v) => `${chk(!!v)}&nbsp;Sí&nbsp;&nbsp;${chk(!v)}&nbsp;No`
 
 // ╔══════════════════════════════════════════════════════════════╗
 // ║  CARÁTULA (tapa de carpeta) — A4                              ║
 // ╚══════════════════════════════════════════════════════════════╝
 function construirCaratula(s) {
-  // Mapeo dinámico del campo de movilidad/rol
   const tipoMovilidad = s.req_rol || s.rdo_vehiculo || s.vehiculo || '';
 
-  // Lista de datos optimizada en orden lógico y con nuevo nombre
   const items = [
     { label: 'N° de Siniestro',     value: val(s.nro_siniestro) },
     { label: 'Compañía / Aseg.',    value: val(s.aseguradora || s.compania) },
@@ -48,7 +46,6 @@ function construirCaratula(s) {
     { label: 'Requerido',           value: val(s.rdo_nombre) }
   ]
 
-  // Filas compactadas (padding 10px) para blindar el diseño contra desbordes de página
   let filasDatos = ''
   items.forEach(item => {
     filasDatos += `
@@ -65,38 +62,27 @@ function construirCaratula(s) {
 
   return `
 <div class="crt-doc" style="${F}width:720px; box-sizing:border-box; margin:0 auto; background:#fff; color:#000; padding:45px 50px 30px; display: flex; flex-direction: column; justify-content: space-between;">
-
   <div>
-    <!-- Encabezado del Estudio Jurídico -->
     <div style="text-align:center; border-bottom:3px solid #000; padding-bottom:15px;">
       <div style="font-size:25px; font-weight:bold; letter-spacing:.06em;">IA&nbsp;&nbsp;|&nbsp;&nbsp;${MIS_DATOS.nombre.toUpperCase()}</div>
       <div style="font-size:12px; letter-spacing:.3em; text-transform:uppercase; color:#333; margin-top:5px; font-weight: bold;">${MIS_DATOS.subtitulo || ''}</div>
     </div>
-
-    <!-- Bloque Central de Identificación -->
     <div style="text-align:center; margin:40px 0 15px;">
       <div style="font-size:13px; letter-spacing:.35em; color:#555; font-weight: 500;">CARPETA DE SINIESTRO N°</div>
       <div style="font-size:110px; font-weight:bold; line-height:1; margin-top:5px; letter-spacing:-0.03em;">${carpetaFmt(s.carpeta_nro)}</div>
     </div>
-
-    <!-- Bloque de Partes Involucradas -->
     <div style="border-top:1.5px solid #000; border-bottom:1.5px solid #000; padding:22px 15px; margin:30px 0; text-align:center; background: #fafafa;">
       <div style="font-size:23px; font-weight:bold; color:#000; letter-spacing: .02em;">${val(s.req_nombre)}</div>
       <div style="font-size:13px; font-weight:bold; text-transform:uppercase; color:#777; margin:10px 0; letter-spacing: .2em;">c /</div>
       <div style="font-size:23px; font-weight:bold; color:#000; letter-spacing: .02em;">${val(s.aseguradora || s.compania)}</div>
     </div>
-
-    <!-- Listado Técnico -->
     <div style="margin-top:30px; padding: 0 5px;">
       ${filasDatos}
     </div>
   </div>
-
-  <!-- Pie de Página Fijo en la misma Hoja -->
   <div style="text-align:center; margin-top:50px; font-size:10px; color:#777; letter-spacing: .05em; border-top: 1px solid #eee; padding-top: 12px;">
     Documento de control interno • Generado el ${fmtF(new Date().toISOString().slice(0, 10))}
   </div>
-
 </div>`
 }
 
@@ -106,52 +92,95 @@ function construirCaratula(s) {
 function construirFormulario(s, docCats = []) {
   const has = (k) => docCats.includes(k)
   const cerrado = (s.estado || 'abierto') === 'cerrado'
-  const box = 'border:1.4px solid #000;padding:8px 10px;margin-bottom:8px;'
-  const line = 'font-size:11px;line-height:2.1;'
-  const u = (v) => `<span style="border-bottom:1px solid #000;padding:0 4px;font-weight:bold;">${val(v)}</span>`
+  
+  // Estilos base optimizados para mayor legibilidad (13px) sin desbordar A4
+  const box = 'border:1.5px solid #000; padding:10px 12px; margin-bottom:10px; box-sizing:border-box;'
+  const titleBox = 'font-size:13px; font-weight:bold; text-transform:uppercase; border-bottom:1px solid #000; padding-bottom:4px; margin-bottom:8px; color:#111;'
+  const line = 'font-size:13px; line-height:1.8; color:#000;'
+  const u = (v) => `<span style="border-bottom:1px solid #888; padding:0 4px; font-weight:bold; font-size:13px;">${val(v)}</span>`
 
   return `
-<div class="frm-doc" style="${F}width:720px;margin:0 auto;background:#fff;color:#000;padding:24px 26px;font-size:11px;">
+<div class="frm-doc" style="${F}width:720px; box-sizing:border-box; margin:0 auto; background:#fff; color:#000; padding:30px 35px; font-size:13px;">
 
+  <!-- Encabezado y Título del Formulario -->
+  <div style="display:flex; justify-content:space-between; align-items:flex-end; border-bottom:2px solid #000; padding-bottom:8px; margin-bottom:15px;">
+    <div style="font-size:18px; font-weight:bold; letter-spacing:0.05em;">FORMULARIO DE SINIESTRO</div>
+    <div style="font-size:14px; font-weight:bold; letter-spacing:0.05em;">CARPETA N°: ${carpetaFmt(s.carpeta_nro)}</div>
+  </div>
+
+  <!-- BLOQUE DESTACADO: Identificadores Principales -->
+  <div style="${box} background:#fcfcfc; border-width:2px;">
+    <div style="display:flex; justify-content:space-between; font-size:16px; font-weight:bold; line-height:1.4;">
+      <div>SINIESTRO N°: <span style="font-size:17px; color:#000; text-decoration:underline;">${val(s.nro_siniestro)}</span></div>
+      <div>COMPAÑÍA: <span style="font-size:17px; color:#000; text-decoration:underline;">${val(s.compania || s.aseguradora)}</span></div>
+    </div>
+  </div>
+
+  <!-- Bloque 1: Requirente -->
   <div style="${box}">
-    <div style="${line}">SINIESTRO: ${u(s.nro_siniestro)} &nbsp;&nbsp; COMPAÑÍA: ${u(s.compania)} &nbsp;&nbsp; CARPETA: ${u(carpetaFmt(s.carpeta_nro))}</div>
-    <div style="${line}">REQUIRENTE: ${u(s.req_nombre)}</div>
-    <div style="${line}">DNI: ${u(s.req_dni)} &nbsp;&nbsp; Teléfono: ${u(s.req_telefono)}</div>
+    <div style="${titleBox}">Datos del Requirente</div>
+    <div style="${line}">NOMBRE Y APELLIDO: ${u(s.req_nombre)}</div>
+    <div style="${line}">DNI: ${u(s.req_dni)} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; TELÉFONO: ${u(s.req_telefono)}</div>
   </div>
 
+  <!-- Bloque 2: El Hecho -->
   <div style="${box}">
-    <div style="${line}">SINIESTRO: ${u(s.nro_siniestro)} &nbsp;&nbsp; Fecha: ${u(fF(s.fecha_hecho))} &nbsp;&nbsp; Hora: ${u(s.hora_hecho)}</div>
-    <div style="${line}">Lugar: ${u(s.lugar)}</div>
-    <div style="${line}">Lesiones? ${sino(s.lesiones)}</div>
-    <div style="${line}">Adjunta Comprobantes Médicos? ${sino(s.comprobantes_medicos)}</div>
-    <div style="${line}">Aseguradora: ${u(s.aseguradora)}</div>
-    <div style="${line}">Denuncia Administrativa: ${sino(s.denuncia_admin)}</div>
-    <div style="${line}">Teléfono: ${u(s.aseg_telefono)} &nbsp;&nbsp; Domicilio: ${u(s.aseg_domicilio)}</div>
-    <div style="${line}">Contacto: ${u(s.aseg_contacto)} &nbsp;&nbsp; Mail: ${u(s.aseg_mail)}</div>
+    <div style="${titleBox}">Detalles del Hecho y Aseguradora</div>
+    <div style="${line}">FECHA: ${u(fF(s.fecha_hecho))} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; HORA: ${u(s.hora_hecho)}</div>
+    <div style="${line}">LUGAR: ${u(s.lugar)}</div>
+    <div style="${line}">¿PRESENTA LESIONES?: ${sino(s.lesiones)} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ¿ADJUNTA COMPROBANTES MÉDICOS?: ${sino(s.comprobantes_medicos)}</div>
+    <div style="${line}; margin-top:4px; border-top:1px dashed #ccc; padding-top:4px;">ASEGURADORA: ${u(s.aseguradora)} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; DENUNCIA ADMINISTRATIVA: ${sino(s.denuncia_admin)}</div>
+    <div style="${line}">DOMICILIO CO. / TEL: ${u(s.aseg_domicilio)} &nbsp;/&nbsp; ${u(s.aseg_telefono)}</div>
+    <div style="${line}">CONTACTO / EMAIL: ${u(s.aseg_contacto)} &nbsp;/&nbsp; ${u(s.aseg_mail)}</div>
   </div>
 
+  <!-- Bloque 3: Requerido -->
   <div style="${box}">
-    <div style="${line}">REQUERIDO: ${u(s.rdo_nombre)} &nbsp;&nbsp; Vehículo: ${u(s.rdo_vehiculo)}</div>
-    <div style="${line}">Teléfono: ${u(s.rdo_telefono)} &nbsp;&nbsp; Domicilio: ${u(s.rdo_domicilio)}</div>
-    <div style="${line}">DNI: ${u(s.rdo_dni)} &nbsp;&nbsp; Dominio: ${u(s.rdo_dominio)} &nbsp;&nbsp; Póliza: ${u(s.rdo_poliza)}</div>
+    <div style="${titleBox}">Datos del Requerido y Vehículo</div>
+    <div style="${line}">REQUERIDO: ${u(s.rdo_nombre)} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; VEHÍCULO: ${u(s.rdo_vehiculo)}</div>
+    <div style="${line}">DNI: ${u(s.rdo_dni)} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; DOMINIO: ${u(s.rdo_dominio)} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; PÓLIZA N°: ${u(s.rdo_poliza)}</div>
+    <div style="${line}">DOMICILIO / TEL: ${u(s.rdo_domicilio)} &nbsp;/&nbsp; ${u(s.rdo_telefono)}</div>
   </div>
 
-  <div style="${line}margin-bottom:8px;">Mediación: ${sino(s.mediacion)} &nbsp;&nbsp; Fecha: ${u(fF(s.mediacion_fecha))} &nbsp;&nbsp; <span style="font-size:10px;">Contacto 4371-3018 – abeniacar@gomezabeniacar.com.ar</span></div>
+  <!-- Bloque Intermedio: Mediación -->
+  <div style="${line} margin: 4px 2px 10px; padding: 4px 6px; background:#f9f9f9; border: 1px solid #ddd;">
+    MEDIACIÓN: ${sino(s.mediacion)} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; FECHA: ${u(fF(s.mediacion_fecha))} 
+    <span style="font-size:11px; float:right; color:#555; font-weight:bold; margin-top:2px;">Contacto: 4371-3018 – abeniacar@gomezabeniacar.com.ar</span>
+  </div>
 
+  <!-- Bloque 4: Daños -->
   <div style="${box}">
-    <div style="${line}">Lesiones: ${u(s.lesiones_detalle)}</div>
-    <div style="${line}">Daños: ${u(s.danos_detalle)}</div>
+    <div style="${line}"><strong>LESIONES:</strong> ${u(s.lesiones_detalle)}</div>
+    <div style="${line}"><strong>DAÑOS MATERIALES:</strong> ${u(s.danos_detalle)}</div>
   </div>
 
-  <div style="${line}margin-bottom:8px;">VISTA MÉDICA: ${sino(s.vista_medica)} &nbsp;&nbsp; Fecha: ${u(fF(s.vm_fecha))} &nbsp;&nbsp; Dr: ${u(s.vm_dr)}</div>
-  <div style="${line}margin-bottom:8px;">Domicilio: ${u(s.vm_domicilio)} &nbsp;&nbsp; Teléfono: ${u(s.vm_telefono)}</div>
-
-  <div style="border:1.4px dashed #000;padding:10px;margin-bottom:8px;${line}">
-    DOCUMENTACIÓN: DNI ${chk(has('DNI'))} &nbsp; CV ${chk(has('CV'))} &nbsp; REG ${chk(has('REG'))} &nbsp; SEG ${chk(has('SEG'))} &nbsp; FOTOS ${chk(has('FOTOS'))}<br>
-    DA ${chk(has('DA'))} &nbsp; CERT. COB. ${chk(has('CERT_COB'))} &nbsp; PRESUPUESTO ${chk(has('PRESUPUESTO'))}
+  <!-- Bloque 5: Vista Médica -->
+  <div style="${box}">
+    <div style="${line}">VISTA MÉDICA: ${sino(s.vista_medica)} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; FECHA: ${u(fF(s.vm_fecha))} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; PROFESIONAL INTERVENIENTE: ${u(s.vm_dr)}</div>
+    <div style="${line}">DOMICILIO / TEL. VISTA: ${u(s.vm_domicilio)} &nbsp;/&nbsp; ${u(s.vm_telefono)}</div>
   </div>
 
-  <div style="${line}">CERRADO? ${sino(cerrado)} &nbsp;&nbsp; Fecha de Pago: ${u(fF(s.fecha_pago))} &nbsp;&nbsp; $: ${u(s.monto_pago != null && s.monto_pago !== '' ? Number(s.monto_pago).toLocaleString('es-AR') : '')}</div>
+  <!-- Bloque 6: Checkbox Documentación -->
+  <div style="border:1.5px dashed #000; padding:10px 12px; margin-bottom:10px; ${line} background:#fafafa;">
+    <strong>DOCUMENTACIÓN ADJUNTADA:</strong><br>
+    <div style="margin-top:5px; display:flex; justify-content:space-between; flex-wrap:wrap;">
+      <div>DNI ${chk(has('DNI'))}</div>
+      <div>CV ${chk(has('CV'))}</div>
+      <div>REGISTRACIÓN ${chk(has('REG'))}</div>
+      <div>SEGURO ${chk(has('SEG'))}</div>
+      <div>FOTOS ${chk(has('FOTOS'))}</div>
+      <div>D.A. ${chk(has('DA'))}</div>
+      <div>CERT. COB. ${chk(has('CERT_COB'))}</div>
+      <div>PRESUPUESTO ${chk(has('PRESUPUESTO'))}</div>
+    </div>
+  </div>
+
+  <!-- Bloque de Cierre -->
+  <div style="${line} padding: 5px 2px;">
+    ¿ESTADO CERRADO?: ${sino(cerrado)} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 
+    FECHA DE PAGO: ${u(fF(s.fecha_pago))} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 
+    MONTO INDEMNIZADO: <span style="font-size:14px; font-weight:bold;">$ ${u(s.monto_pago != null && s.monto_pago !== '' ? Number(s.monto_pago).toLocaleString('es-AR') : '')}</span>
+  </div>
 
 </div>`
 }
@@ -167,7 +196,7 @@ async function generar(html, filename, selector) {
     await waitImages(host)
     try {
       await html2pdf().set({
-        margin: 0, // Ajustado a 0 ya que el contenedor maneja sus propios paddings de imprenta
+        margin: 0,
         filename,
         image: { type: 'jpeg', quality: 0.98 },
         html2canvas: { scale: 3, backgroundColor: '#ffffff', useCORS: true, imageTimeout: 15000 },
