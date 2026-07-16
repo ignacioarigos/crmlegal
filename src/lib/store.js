@@ -6,7 +6,7 @@ let _state = {
   tareas: [], causas: [], registros: [], gastos: [],
   eventos: [], tramites: [], cobros: [],
   siniestros: [], siniestro_docs: [], aseguradoras: [],
-  siniestro_novedades: [], siniestro_ofertas: [],
+  siniestro_novedades: [], siniestro_ofertas: [], modelos: [],
   loaded: false,
 }
 let _listeners = []
@@ -31,17 +31,16 @@ export function unsubscribe(listener) {
 
 // ── Carga inicial ──────────────────────────────────────────────
 export async function loadAll() {
-  const [t, c, r, g, e, tr, co] = await Promise.all([
-    DB.get('crm_tareas'), DB.get('crm_causas'), DB.get('crm_registros'),
-    DB.get('crm_gastos'), DB.get('crm_eventos'), DB.get('crm_tramites'),
-    DB.get('crm_cobros'),
-  ])
-  _state.tareas    = t  || []
-  _state.causas    = c  || []
-  _state.registros = r  || []
-  _state.gastos    = g  || []
-  _state.eventos   = e  || []
-  _state.cobros    = co || []
+  const [s, sd, ag, nv, of, md] = await Promise.all([
+      DB.get('crm_siniestros'), DB.get('crm_siniestro_docs'), DB.get('crm_aseguradoras'),
+      DB.get('crm_siniestro_novedades'), DB.get('crm_siniestro_ofertas'), DB.get('crm_modelos'),
+    ])
+    _state.siniestros          = s  || []
+    _state.siniestro_docs      = sd || []
+    _state.aseguradoras        = ag || []
+    _state.siniestro_novedades = nv || []
+    _state.siniestro_ofertas   = of || []
+    _state.modelos             = md || []
   if (!tr || tr.length === 0) {
     await seedTramites()
   } else {
@@ -65,6 +64,7 @@ export async function loadAll() {
     _state.aseguradoras        = _state.aseguradoras || []
     _state.siniestro_novedades = _state.siniestro_novedades || []
     _state.siniestro_ofertas   = _state.siniestro_ofertas || []
+    _state.modelos             = _state.modelos || []
   }
 
   _state.loaded = true
@@ -364,5 +364,24 @@ export async function aceptarOferta(siniestroId, ofertaId) {
     await DB.update('crm_siniestro_ofertas', o.id, { aceptada: debe })
     _state.siniestro_ofertas = _state.siniestro_ofertas.map(x => x.id === o.id ? { ...x, aceptada: debe } : x)
   }
+  notify()
+}
+// ── Modelos de escritos ───────────────────────────────────────
+export async function saveModelo(obj) {
+  const exists = _state.modelos.find(x => x.id === obj.id)
+  if (exists) {
+    await DB.update('crm_modelos', obj.id, obj)
+    _state.modelos = _state.modelos.map(x => x.id === obj.id ? obj : x)
+  } else {
+    await DB.insert('crm_modelos', obj)
+    _state.modelos = [..._state.modelos, obj]
+  }
+  notify()
+  return obj
+}
+
+export async function deleteModelo(id) {
+  await DB.delete('crm_modelos', id)
+  _state.modelos = _state.modelos.filter(x => x.id !== id)
   notify()
 }
