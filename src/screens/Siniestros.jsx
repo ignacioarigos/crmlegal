@@ -9,7 +9,6 @@ import {
   saveTarea, saveCobro,
 } from '../lib/store.js'
 import { imprimirCaratula, imprimirFormulario } from '../lib/caratula.js'
-import Modal from '../components/Modal.jsx'
 
 // ── Documentación inicial (checklist del formulario) ──
 const DOC_CATS = [
@@ -642,52 +641,73 @@ function SeguimientoTab({ siniestro, novedades }) {
       )}
 
       {modal && (
-        <Modal title="Nueva Novedad" onClose={() => { setModal(false); reset() }} maxWidth="520px">
-          <div className="form-group" style={{ marginBottom: '.9rem' }}>
-            <label>Fecha</label>
-            <input type="date" className="form-control" value={fecha} onChange={e => setFecha(e.target.value)} />
-          </div>
-          <div className="form-group" style={{ marginBottom: '.9rem' }}>
-            <label>Novedad *</label>
-            <textarea className="form-control" rows="3" value={novedad} onChange={e => setNovedad(e.target.value)}
-              placeholder="Ej: Llamé a la compañía, me derivan al liquidador..." />
-          </div>
-          <div className="form-group" style={{ marginBottom: '.9rem' }}>
-            <label>Acción</label>
-            <textarea className="form-control" rows="2" value={accion} onChange={e => setAccion(e.target.value)}
-              placeholder="¿Qué corresponde hacer?" />
-          </div>
+        <SinModal title="Nueva novedad" onClose={() => { setModal(false); reset() }}>
+          <div className="sin-modal-grid">
+            <label className="sin-field">
+              <span>Fecha</span>
+              <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} />
+            </label>
 
-          <div className="card" style={{ background: 'var(--cream)', marginBottom: '.9rem', padding: '.9rem' }}>
-            <div className="checkbox-row">
-              <input type="checkbox" checked={crearTarea} onChange={e => setCrearTarea(e.target.checked)} />
-              <label><strong>Generar tarea a partir de esta novedad</strong></label>
+            <label className="sin-field wide">
+              <span>Novedad *</span>
+              <textarea rows="3" value={novedad} onChange={e => setNovedad(e.target.value)}
+                placeholder="Ej: Llamé a la compañía, me derivan al liquidador…" autoFocus />
+            </label>
+
+            <label className="sin-field wide">
+              <span>Acción</span>
+              <textarea rows="2" value={accion} onChange={e => setAccion(e.target.value)}
+                placeholder="¿Qué corresponde hacer?" />
+            </label>
+
+            <div className="sin-modal-tarea wide">
+              <label className="sin-check">
+                <input type="checkbox" checked={crearTarea} onChange={e => setCrearTarea(e.target.checked)} />
+                <span>Generar tarea a partir de esta novedad</span>
+              </label>
+
+              {crearTarea && (
+                <div className="sin-modal-grid" style={{ marginTop: '.9rem' }}>
+                  <label className="sin-field wide">
+                    <span>Título de la tarea</span>
+                    <input value={tareaTitulo} onChange={e => setTareaTitulo(e.target.value)}
+                      placeholder="Si lo dejás vacío, se usa el texto de la novedad" />
+                  </label>
+                  <label className="sin-field">
+                    <span>Vencimiento (opcional)</span>
+                    <input type="date" value={tareaVenc} onChange={e => setTareaVenc(e.target.value)} />
+                  </label>
+                </div>
+              )}
             </div>
-            {crearTarea && (
-              <div style={{ marginTop: '.75rem' }}>
-                <div className="form-group" style={{ marginBottom: '.6rem' }}>
-                  <label>Título de la tarea</label>
-                  <input className="form-control" value={tareaTitulo} onChange={e => setTareaTitulo(e.target.value)}
-                    placeholder="Si vacío, se usa el texto de la novedad" />
-                </div>
-                <div className="form-group">
-                  <label>Vencimiento (opcional)</label>
-                  <input type="date" className="form-control" value={tareaVenc} onChange={e => setTareaVenc(e.target.value)} />
-                </div>
-              </div>
-            )}
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '.6rem' }}>
-            <button className="btn btn-ghost" onClick={() => { setModal(false); reset() }}>Cancelar</button>
-            <button className="btn btn-primary" onClick={handleSave} disabled={busy}>{busy ? 'Guardando…' : 'Guardar'}</button>
+          <div className="sin-modal-foot">
+            <button className="sin-btn ghost" onClick={() => { setModal(false); reset() }}>Cancelar</button>
+            <button className="sin-btn primary" onClick={handleSave} disabled={busy}>
+              {busy ? 'Guardando…' : 'Guardar'}
+            </button>
           </div>
-        </Modal>
+        </SinModal>
       )}
     </>
   )
 }
 
+// ── Modal propio del módulo (oscuro, coherente con la paleta) ──
+function SinModal({ title, onClose, children }) {
+  return (
+    <div className="sin-modal-ov" onClick={onClose}>
+      <div className="sin-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="sin-modal-head">
+          <h3>{title}</h3>
+          <button className="sin-modal-x" onClick={onClose} title="Cerrar">✕</button>
+        </div>
+        <div className="sin-modal-body">{children}</div>
+      </div>
+    </div>
+  )
+}
 // ══════════════════ PESTAÑA: CIERRE ══════════════════
 function CierreTab({ siniestro, ofertas, docs, cobros }) {
   const [fecha, setFecha] = useState(dateFmt(new Date()))
@@ -991,11 +1011,15 @@ function Style() {
     .sin-readbar strong { color:var(--g); font-weight:600; }
 
     /* Pestañas */
-    .sin-tabs { display:flex; gap:.3rem; border-bottom:1px solid var(--line); margin-bottom:1.25rem; }
-    .sin-tab { background:none; border:none; border-bottom:2px solid transparent; color:var(--muted);
-      padding:.6rem 1.1rem; cursor:pointer; font-family:inherit; font-size:.82rem; transition:all .15s; }
-    .sin-tab:hover:not(:disabled) { color:var(--txt); }
-    .sin-tab.on { color:var(--g); border-bottom-color:var(--g); font-weight:600; }
+    /* Pestañas estilo navegador */
+    .sin-tabs { display:flex; gap:.3rem; border-bottom:2px solid var(--g); margin-bottom:1.25rem; padding-left:.4rem; }
+    .sin-tab { background:rgba(0,0,0,.22); border:1px solid var(--line); border-bottom:none;
+      border-radius:9px 9px 0 0; color:var(--muted); padding:.6rem 1.5rem; cursor:pointer;
+      font-family:inherit; font-size:.82rem; letter-spacing:.02em; position:relative; top:2px; transition:all .15s; }
+    .sin-tab:hover:not(:disabled) { color:var(--txt); background:rgba(0,0,0,.35); }
+    .sin-tab.on { background:var(--panel); border-color:var(--g); border-top-width:3px;
+      color:var(--g); font-weight:600; top:0; padding-bottom:.7rem; }
+    .sin-tab:disabled { opacity:.3; cursor:default; }
     .sin-tab:disabled { opacity:.35; cursor:default; }
 
     .sin-sub-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem; flex-wrap:wrap; gap:.6rem; }
@@ -1083,6 +1107,25 @@ function Style() {
     .sin-slot-file .x { background:none; border:none; color:var(--danger); cursor:pointer; font-size:.72rem; }
     .sin-slot-up { display:inline-block; font-size:.74rem; color:var(--muted); cursor:pointer; padding:.25rem 0; }
     .sin-slot-up:hover { color:var(--g); }
+    /* Modal propio */
+    .sin-modal-ov { position:fixed; inset:0; background:rgba(12,10,7,.72); backdrop-filter:blur(3px);
+      display:flex; align-items:flex-start; justify-content:center; padding:4vh 1rem; z-index:100; overflow-y:auto; }
+    .sin-modal { background:var(--panel); border:1px solid var(--input-b); border-radius:14px;
+      width:100%; max-width:560px; box-shadow:0 18px 50px rgba(0,0,0,.55); color:var(--txt); }
+    .sin-modal-head { display:flex; align-items:center; justify-content:space-between;
+      padding:1rem 1.2rem; border-bottom:1px solid var(--line); }
+    .sin-modal-head h3 { margin:0; font-family:'Fraunces', serif; font-size:1.05rem; color:var(--g);
+      text-transform:uppercase; letter-spacing:.05em; }
+    .sin-modal-x { background:none; border:none; color:var(--muted); font-size:1rem; cursor:pointer; padding:.2rem .4rem; border-radius:6px; }
+    .sin-modal-x:hover { color:var(--danger); background:rgba(201,96,63,.12); }
+    .sin-modal-body { padding:1.2rem; }
+    .sin-modal-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:.9rem 1.1rem; }
+    .sin-modal-foot { display:flex; justify-content:flex-end; gap:.6rem; padding:1rem 1.2rem;
+      border-top:1px solid var(--line); }
+    .sin-modal-tarea { background:rgba(201,162,75,.05); border:1px solid var(--line);
+      border-radius:10px; padding:.9rem 1rem; }
+    .sin-check { display:flex; align-items:center; gap:.6rem; cursor:pointer; font-size:.82rem; color:var(--txt); }
+    .sin-check input { width:16px; height:16px; accent-color:var(--g); cursor:pointer; }
 
     @media (max-width:640px) {
       .sin-grid-fields { grid-template-columns:1fr; }
