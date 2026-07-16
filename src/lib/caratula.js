@@ -278,10 +278,129 @@ async function generar(html, filename, selector) {
     setTimeout(() => { w.focus(); w.print() }, 400)
   }
 }
+// ╔══════════════════════════════════════════════════════════════╗
+// ║  CIERRE DE CARPETA — A4                                       ║
+// ╚══════════════════════════════════════════════════════════════╝
+const DOC_CIERRE_LBL = [
+  ['CONVENIO', 'Convenio / Acuerdo'], ['FACTURA', 'Factura'],
+  ['CBU_ESTUDIO', 'CBU estudio'], ['CBU_CLIENTE', 'CBU cliente'],
+  ['CONST_CUIT', 'Constancia CUIT'], ['CONST_IIGG', 'Constancia IIGG'],
+  ['FORM_EXTRA', 'Formulario extra'],
+]
+const DOC_MED_LBL = [
+  ['MED_FACTURA', 'Factura mediadora'], ['MED_CUIT', 'CUIT mediadora'], ['MED_CBU', 'CBU mediadora'],
+]
 
+function construirCierre(s, ofertas = [], docCats = []) {
+  const has = (k) => docCats.includes(k)
+  const box = 'border:1.5px solid #000; padding:10px 12px; margin-bottom:10px; box-sizing:border-box;'
+  const titleBox = 'font-size:13px; font-weight:bold; text-transform:uppercase; border-bottom:1px solid #000; padding-bottom:4px; margin-bottom:8px; color:#111;'
+  const line = 'font-size:13px; line-height:1.8; color:#000;'
+
+  const list = [...ofertas].sort((a, b) => (a.fecha || '').localeCompare(b.fecha || ''))
+  const acc = list.find(o => o.aceptada)
+
+  const acordado    = acc ? Number(acc.monto) || 0 : 0
+  const pctCia      = acc ? Number(acc.hon_pct_cia) || 0 : 0
+  const pctCli      = Number(s.hon_pct) || 0
+  const honCia      = acordado * pctCia / 100
+  const honCliente  = acordado * pctCli / 100
+  const netoCliente = acordado - honCliente
+  const totalPerc   = honCia + honCliente
+
+  // Historial de negociación
+  let filasNeg = ''
+  if (list.length === 0) {
+    filasNeg = `<tr><td colspan="5" style="${line}padding:6px 4px;color:#666;">Sin ofertas registradas.</td></tr>`
+  } else {
+    list.forEach(o => {
+      const esAcc = !!o.aceptada
+      filasNeg += `<tr style="${esAcc ? 'background:#f0f0f0;font-weight:bold;' : ''}">
+        <td style="border:1px solid #ccc;padding:5px 7px;font-size:12px;">${fF(o.fecha)}</td>
+        <td style="border:1px solid #ccc;padding:5px 7px;font-size:12px;">${o.tipo === 'oferta' ? 'Oferta compañía' : 'Contraoferta'}</td>
+        <td style="border:1px solid #ccc;padding:5px 7px;font-size:12px;text-align:right;">${money(o.monto)}</td>
+        <td style="border:1px solid #ccc;padding:5px 7px;font-size:12px;text-align:center;">${o.hon_pct_cia != null ? o.hon_pct_cia + '%' : '—'}</td>
+        <td style="border:1px solid #ccc;padding:5px 7px;font-size:11px;">${esAcc ? '✔ ACEPTADA' : (o.nota || '')}</td>
+      </tr>`
+    })
+  }
+
+  // Liquidación
+  const filaLiq = (lbl, monto, extra = '') =>
+    `<tr><td style="${line}padding:5px 4px;border-bottom:1px solid #ddd;${extra}">${lbl}</td>
+         <td style="${line}padding:5px 4px;border-bottom:1px solid #ddd;text-align:right;font-weight:bold;${extra}">${monto}</td></tr>`
+
+  const liq = acc ? `
+    <table style="width:100%;border-collapse:collapse;">
+      ${filaLiq('Monto acordado', money(acordado))}
+      ${filaLiq(`Honorarios cliente (${pctCli}%)`, money(honCliente))}
+      ${filaLiq(`Honorarios compañía (${pctCia}%)`, money(honCia))}
+      ${filaLiq('Neto al cliente', money(netoCliente), 'border-top:1.5px solid #000;')}
+      ${filaLiq('TOTAL PERCIBIDO POR EL ESTUDIO', money(totalPerc), 'font-size:15px;')}
+    </table>`
+    : `<div style="${line}color:#666;">No hay oferta aceptada.</div>`
+
+  // Documentación
+  const cats = [...DOC_CIERRE_LBL, ...(s.mediacion ? DOC_MED_LBL : [])]
+  const docsHtml = cats.map(([k, lbl]) =>
+    `<div style="width:33%;box-sizing:border-box;padding:3px 0;font-size:12px;">${chk(has(k))}&nbsp;${lbl}</div>`
+  ).join('')
+
+  return `
+<div class="cie-doc" style="${F}width:720px; box-sizing:border-box; margin:0 auto; background:#fff; color:#000; padding:30px 35px;">
+
+  <div style="display:flex; justify-content:space-between; align-items:flex-end; border-bottom:2px solid #000; padding-bottom:8px; margin-bottom:15px;">
+    <div style="font-size:18px; font-weight:bold; letter-spacing:0.05em;">CIERRE DE CARPETA</div>
+    <div style="font-size:14px; font-weight:bold; letter-spacing:0.05em;">CARPETA N°: ${carpetaFmt(s.carpeta_nro)}</div>
+  </div>
+
+  <div style="${box} background:#fcfcfc; border-width:2px;">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; font-size:15px; font-weight:bold; line-height:1.4;">
+      <div>${val(s.req_nombre)}</div>
+      <div style="text-align:right;">
+        <div>${cia(s)}</div>
+        <div style="font-size:11px; color:#555; margin-top:2px;">SINIESTRO N°: ${val(s.nro_siniestro)}</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="${box}">
+    <div style="${titleBox}">Negociación</div>
+    <table style="width:100%;border-collapse:collapse;">
+      <tr style="background:#ececec;">
+        <th style="border:1px solid #999;padding:5px 7px;font-size:10px;text-transform:uppercase;text-align:left;">Fecha</th>
+        <th style="border:1px solid #999;padding:5px 7px;font-size:10px;text-transform:uppercase;text-align:left;">Origen</th>
+        <th style="border:1px solid #999;padding:5px 7px;font-size:10px;text-transform:uppercase;text-align:right;">Monto</th>
+        <th style="border:1px solid #999;padding:5px 7px;font-size:10px;text-transform:uppercase;text-align:center;">Hon. cía</th>
+        <th style="border:1px solid #999;padding:5px 7px;font-size:10px;text-transform:uppercase;text-align:left;">Obs.</th>
+      </tr>
+      ${filasNeg}
+    </table>
+  </div>
+
+  <div style="${box}">
+    <div style="${titleBox}">Liquidación</div>
+    ${liq}
+  </div>
+
+  <div style="border:1.5px dashed #000; padding:10px 12px; background:#fafafa; margin-bottom:10px;">
+    <div style="font-size:13px;font-weight:bold;text-transform:uppercase;margin-bottom:6px;">Documentación de cierre</div>
+    <div style="display:flex;flex-wrap:wrap;">${docsHtml}</div>
+  </div>
+
+  <div style="display:flex; justify-content:space-between; font-size:12px; margin-top:14px;">
+    <div>ESTADO: <b>${(s.estado || 'abierto') === 'cerrado' ? 'CERRADO' : 'EN TRÁMITE'}</b></div>
+    <div style="color:#777;">Generado el ${fmtF(new Date().toISOString().slice(0, 10))}</div>
+  </div>
+
+</div>`
+}
 export function imprimirCaratula(s) {
   return generar(construirCaratula(s), `Caratula-${carpetaFmt(s.carpeta_nro)}.pdf`, '.crt-doc')
 }
 export function imprimirFormulario(s, docCats = []) {
   return generar(construirFormulario(s, docCats), `Formulario-${carpetaFmt(s.carpeta_nro)}.pdf`, '.frm-doc')
+}
+export function imprimirCierre(s, ofertas = [], docCats = []) {
+  return generar(construirCierre(s, ofertas, docCats), `Cierre-${carpetaFmt(s.carpeta_nro)}.pdf`, '.cie-doc')
 }
