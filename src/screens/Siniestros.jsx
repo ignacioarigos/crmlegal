@@ -8,7 +8,7 @@ import {
   saveOferta, deleteOferta, aceptarOferta,
   saveTarea, saveCobro,
 } from '../lib/store.js'
-import { imprimirCaratula, imprimirFormulario } from '../lib/caratula.js'
+import { imprimirCaratula, imprimirFormulario, imprimirCierre } from '../lib/caratula.js'
 
 // ── Documentación inicial (checklist del formulario) ──
 const DOC_CATS = [
@@ -785,9 +785,15 @@ function CierreTab({ siniestro, ofertas, docs, cobros }) {
   }
 
   const cats = [...DOC_CIERRE, ...(siniestro.mediacion ? DOC_MEDIACION : [])]
+  const docCatsCierre = docs.filter(d => d.siniestro_id === siniestro.id).map(d => d.categoria)
 
   return (
     <>
+      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.1rem' }}>
+        <button className="sin-btn pdf" onClick={() => imprimirCierre(siniestro, ofertas, docCatsCierre)}>
+          ⬇ Hoja de cierre PDF
+        </button>
+      </div>
       {/* ── Negociación ── */}
       <div className="sin-section">
         <h3>Negociación</h3>
