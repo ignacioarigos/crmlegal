@@ -21,6 +21,22 @@ const FUERO_COLOR = {
 }
 const fueroColor = (c) => FUERO_COLOR[c.fuero] || 'rgba(128,128,128,.35)'
 
+// Síntesis
+const ROLES = ['Actora', 'Demandada', 'Tercero', 'Querella', 'Defensa']
+const ROL_COLOR = {
+  'Actora': 'var(--ok)',
+  'Demandada': 'var(--urgent)',
+  'Tercero': 'var(--slate)',
+  'Querella': 'var(--gold)',
+  'Defensa': 'var(--slate)',
+}
+
+// Hilo / tareas
+const CRIT_ICON  = { urgente:'🔴', alta:'🟠', normal:'🟢', baja:'⚪' }
+const CRIT_COLOR = { urgente:'var(--urgent)', alta:'var(--gold)', normal:'var(--ok)', baja:'var(--muted)' }
+const CRIT_ORDEN = { urgente:0, alta:1, normal:2, baja:3 }
+const ESTADO_LBL = { 'no-iniciada':'No iniciada', 'en-curso':'En curso', 'completada':'Completada' }
+
 export function Causas({ navigate, store }) {
   const { causas, gastos, registros } = store
   const [modal, setModal] = useState(false)
@@ -67,7 +83,8 @@ export function Causas({ navigate, store }) {
 
   const handleSave = async () => {
     if (!caratula.trim()) return alert('Ingrese la carátula.')
-    const obj = { id: editId||uid(), caratula: caratula.trim(), tribunal, fuero, juzgado: juzgado.trim()||null, nro: nro.trim()||null, cliente: cliente.trim()||null, estado: estadoCausa, presupuesto: esCivil&&presupuesto?parseFloat(presupuesto):null, moneda: esCivil?moneda:null, fecha: new Date().toISOString() }
+    const prev = editId ? causas.find(x=>x.id===editId) : null
+    const obj = { ...(prev||{}), id: editId||uid(), caratula: caratula.trim(), tribunal, fuero, juzgado: juzgado.trim()||null, nro: nro.trim()||null, cliente: cliente.trim()||null, estado: estadoCausa, presupuesto: esCivil&&presupuesto?parseFloat(presupuesto):null, moneda: esCivil?moneda:null, fecha: prev?.fecha || new Date().toISOString() }
     await saveCausa(obj)
     setModal(false)
   }
@@ -96,7 +113,7 @@ export function Causas({ navigate, store }) {
     lista = lista.filter(c => (c.estado || 'activa') === target)
   }
   if (fTribunal !== 'todos') lista = lista.filter(c => c.tribunal === fTribunal)
-  if (q) lista = lista.filter(c => norm([c.caratula, c.cliente, c.nro, c.juzgado, c.fuero].filter(Boolean).join(' ')).includes(q))
+  if (q) lista = lista.filter(c => norm([c.caratula, c.cliente, c.nro, c.juzgado, c.fuero, c.objeto].filter(Boolean).join(' ')).includes(q))
 
   // Ordenamiento
   if (orden === 'alfabetico') {
@@ -153,6 +170,10 @@ export function Causas({ navigate, store }) {
 
   const archTag = <span style={{marginLeft:'.5rem',fontSize:'.6rem',fontFamily:mono,color:'var(--muted)',border:'1px solid var(--muted)',borderRadius:4,padding:'0 .35rem',verticalAlign:'middle'}}>ARCHIVADA</span>
 
+  const rolTag = (c) => c.rol
+    ? <span style={{fontSize:'.6rem',fontFamily:mono,fontWeight:700,textTransform:'uppercase',letterSpacing:'.07em',color:ROL_COLOR[c.rol]||'var(--muted)',border:`1px solid ${ROL_COLOR[c.rol]||'var(--muted)'}`,borderRadius:4,padding:'0 .3rem'}}>{c.rol}</span>
+    : null
+
   // ── Render de una causa (fila de lista) ──
   const filaDe = (c) => {
     const archivada = (c.estado||'activa')==='archivada'
@@ -165,6 +186,7 @@ export function Causas({ navigate, store }) {
           <div className="causa-sub">{[c.fuero,c.juzgado,c.nro,c.cliente?'👤 '+c.cliente:''].filter(Boolean).join(' · ')}</div>
         </div>
         <div style={{display:'flex',gap:'.4rem',alignItems:'center'}} onClick={e=>e.stopPropagation()}>
+          {rolTag(c)}
           {act&&<span style={{fontSize:'.66rem',fontFamily:mono,color:'var(--muted)',whiteSpace:'nowrap'}} title="Última actividad">⏱ {fmtF(act)}</span>}
           {saldoTag(c)}
           <button className="btn btn-ghost btn-xs" title={archivada?'Desarchivar':'Archivar'} onClick={()=>toggleArchivo(c)}>{archivada?'↩':'🗄'}</button>
@@ -194,6 +216,13 @@ export function Causas({ navigate, store }) {
         <div style={{fontFamily:serif,fontWeight:700,fontSize:'.96rem',lineHeight:1.34,letterSpacing:'-.01em',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}} title={c.caratula}>
           {c.caratula}
         </div>
+        {/* síntesis mínima: rol + objeto */}
+        {(c.rol||c.objeto)&&(
+          <div style={{display:'flex',alignItems:'center',gap:'.4rem',flexWrap:'wrap'}}>
+            {rolTag(c)}
+            {c.objeto&&<span style={{fontSize:'.74rem',color:'var(--muted)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={c.objeto}>{c.objeto}</span>}
+          </div>
+        )}
         {/* datos */}
         <div style={{fontSize:'.74rem',color:'var(--muted)'}}>
           {[c.juzgado,c.nro].filter(Boolean).join(' · ')||'—'}
@@ -312,6 +341,41 @@ export function CausaDetail({ id, navigate, store }) {
   const { causas, registros, gastos, cobros, tramites } = store
   const c = causas.find(x=>x.id===id)
 
+  // ── Persistencia liviana ──
+  const tget = (k,d) => { try { return localStorage.getItem(k) || d } catch { return d } }
+  const tset = (k,v) => { try { localStorage.setItem(k,v) } catch {} }
+
+  // ── Tabs ──
+  const [tab, setTab] = useState(() => tget('ia_causa_tab','hilo'))
+  const setTabP = (v) => { setTab(v); tset('ia_causa_tab', v) }
+
+  // ── Hilo: sentido de lectura ──
+  const [hiloAsc, setHiloAsc] = useState(() => tget('ia_causa_hilo_asc','0') === '1')
+  const toggleHiloOrden = () => { const v = !hiloAsc; setHiloAsc(v); tset('ia_causa_hilo_asc', v ? '1' : '0') }
+
+  // ── Síntesis ──
+  const [sintOpen, setSintOpen] = useState(() => tget('ia_causa_sint','1') === '1')
+  const toggleSint = () => { const v = !sintOpen; setSintOpen(v); tset('ia_causa_sint', v ? '1' : '0') }
+  const [sintModal, setSintModal] = useState(false)
+  const [sRol, setSRol] = useState('')
+  const [sObjeto, setSObjeto] = useState('')
+  const [sMonto, setSMonto] = useState('')
+  const [sMonedaR, setSMonedaR] = useState('ARS')
+  const [sHechos, setSHechos] = useState('')
+  const [sEstrat, setSEstrat] = useState('')
+  const [sSaving, setSSaving] = useState(false)
+
+  const openSintModal = () => {
+    if (!c) return
+    setSRol(c.rol||'')
+    setSObjeto(c.objeto||'')
+    setSMonto(c.monto_reclamo ?? '')
+    setSMonedaR(c.moneda_reclamo||'ARS')
+    setSHechos(c.hechos||'')
+    setSEstrat(c.estrategia_gral||'')
+    setSintModal(true)
+  }
+
   // ── Cobro ──
   const [cobroModal, setCobroModal] = useState(false)
   const [cbFecha, setCbFecha] = useState(dateFmt(new Date()))
@@ -399,7 +463,6 @@ export function CausaDetail({ id, navigate, store }) {
   const handleSaveMovimiento = async () => {
     if (!mPortal || !mNovedad.trim()) return alert('Complete portal y novedad.')
     if (movEditId) {
-      const original = registros.find(x => x.id === movEditId)
       const patch = {
         portal: mPortal,
         novedad: mNovedad.trim(),
@@ -437,6 +500,21 @@ export function CausaDetail({ id, navigate, store }) {
     const tot    = gList.reduce((s,g)=>s+(g.total||0),0)
     const totARS = cbList.filter(cb=>!cb.moneda||cb.moneda==='ARS').reduce((s,cb)=>s+(cb.monto||0),0)
     const totUSD = cbList.filter(cb=>cb.moneda==='USD').reduce((s,cb)=>s+(cb.monto||0),0)
+
+    const montoR = c.monto_reclamo ? (c.moneda_reclamo==='USD'?'U$S ':'$') + Number(c.monto_reclamo).toLocaleString('es-AR') : null
+    const hayS = !!(c.rol || c.objeto || c.monto_reclamo || c.hechos || c.estrategia_gral)
+    const secSintesis = hayS ? `
+      <h2>Síntesis</h2>
+      <div class="sintesis">
+        <div class="sintesis-line">
+          ${c.rol?`<span class="rol">${c.rol}</span>`:''}
+          ${c.objeto?`<strong>${c.objeto}</strong>`:''}
+          ${montoR?` &nbsp;·&nbsp; <span class="monto">${montoR}</span>`:''}
+        </div>
+        ${c.hechos?`<div class="sub-tit">Antecedentes</div><div class="parrafo">${String(c.hechos).replace(/\n/g,'<br>')}</div>`:''}
+        ${c.estrategia_gral?`<div class="sub-tit">Estrategia</div><div class="parrafo estrat">${String(c.estrategia_gral).replace(/\n/g,'<br>')}</div>`:''}
+      </div>
+    ` : ''
 
     const secMov = movs.length ? `
       <h2>Movimientos (${movs.length})</h2>
@@ -506,6 +584,13 @@ export function CausaDetail({ id, navigate, store }) {
         table { width: 100%; border-collapse: collapse; margin-bottom: .5rem; }
         th { background: #0f0e0c; color: #d4a843; text-align: left; padding: .4rem .6rem; font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; }
         td { padding: .4rem .6rem; border-bottom: 1px solid #e8e3da; vertical-align: top; font-size: .8rem; }
+        .sintesis { background: #faf7f0; border-left: 3px solid #b8922a; padding: .7rem .9rem; }
+        .sintesis-line { font-size: .9rem; margin-bottom: .5rem; }
+        .sintesis .rol { font-family: monospace; font-size: .65rem; font-weight: 700; text-transform: uppercase; border: 1px solid #666; border-radius: 3px; padding: .1rem .3rem; margin-right: .4rem; }
+        .sintesis .monto { font-family: monospace; font-weight: 700; color: #8a6d1f; }
+        .sub-tit { font-family: monospace; font-size: .62rem; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: #888; margin: .6rem 0 .2rem; }
+        .parrafo { font-size: .82rem; line-height: 1.6; }
+        .parrafo.estrat { font-style: italic; border-left: 2px solid #b8922a; padding-left: .5rem; }
         .entry { display: flex; gap: .7rem; margin-bottom: .7rem; padding-bottom: .7rem; border-bottom: 1px solid #eee; }
         .badge { background: #0f0e0c; color: #d4a843; border-radius: 4px; padding: .2rem .5rem; font-family: monospace; font-size: .65rem; font-weight: 700; white-space: nowrap; align-self: flex-start; }
         .entry-body { flex: 1; }
@@ -525,6 +610,7 @@ export function CausaDetail({ id, navigate, store }) {
           &nbsp;·&nbsp; Impreso el ${new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'})}
         </div>
       </div>
+      ${secSintesis}
       ${secMov}
       ${secTareas}
       ${secGastos}
@@ -545,9 +631,36 @@ export function CausaDetail({ id, navigate, store }) {
   const movs   = registros.filter(r=>r.causa===id)
   const gList  = gastos.filter(g=>g.causa===id)
   const cbList = cobros.filter(cb=>cb.causa===id)
+  const tareasCausa = (store.tareas||[]).filter(t=>t.causa===id)
   const tot    = gList.reduce((s,g)=>s+(g.total||0),0)
   const totARS = cbList.filter(cb=>!cb.moneda||cb.moneda==='ARS').reduce((s,cb)=>s+(cb.monto||0),0)
   const totUSD = cbList.filter(cb=>cb.moneda==='USD').reduce((s,cb)=>s+(cb.monto||0),0)
+
+  // ── Hilo conductor: movimientos + tareas mezclados por fecha ──
+  const hilo = [
+    ...movs.map(r => ({ tipo:'mov', id:r.id, ts: r.fecha||'', o:r })),
+    ...tareasCausa.map(t => ({ tipo:'tarea', id:t.id, ts: t.vencimiento ? t.vencimiento+'T12:00:00' : (t.fecha||''), o:t })),
+  ].sort((a,b) => hiloAsc ? (a.ts||'').localeCompare(b.ts||'') : (b.ts||'').localeCompare(a.ts||''))
+
+  const handleSaveSintesis = async () => {
+    setSSaving(true)
+    await saveCausa({
+      ...c,
+      rol: sRol || null,
+      objeto: sObjeto.trim() || null,
+      monto_reclamo: sMonto !== '' ? parseFloat(sMonto) : null,
+      moneda_reclamo: sMonto !== '' ? sMonedaR : null,
+      hechos: sHechos.trim() || null,
+      estrategia_gral: sEstrat.trim() || null,
+      sintesis_updated_at: new Date().toISOString(),
+    })
+    setSSaving(false); setSintModal(false)
+  }
+
+  const haySintesis = !!(c.rol || c.objeto || c.monto_reclamo || c.hechos || c.estrategia_gral)
+  const montoTxt = c.monto_reclamo
+    ? (c.moneda_reclamo==='USD'?'U$S ':'$') + Number(c.monto_reclamo).toLocaleString('es-AR')
+    : null
 
   let pptoBar = null
   if (c.presupuesto) {
@@ -614,11 +727,57 @@ export function CausaDetail({ id, navigate, store }) {
 
   return (
     <div>
+      <style>{`
+        .sintesis-card { padding:.75rem .9rem; margin-bottom:1.1rem; border-left:3px solid var(--gold); }
+        .sintesis-head { display:flex; align-items:center; gap:.5rem; cursor:pointer; user-select:none; }
+        .sintesis-caret { color:var(--gold); font-size:.8rem; width:.8rem; }
+        .sintesis-label { font-family:${mono}; font-size:.66rem; font-weight:700; text-transform:uppercase; letter-spacing:.14em; color:var(--gold); white-space:nowrap; }
+        .sintesis-resumen { font-size:.78rem; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+        .sintesis-body { margin-top:.7rem; padding-top:.7rem; border-top:1px solid rgba(128,128,128,.18); }
+        .sintesis-vacia { font-size:.8rem; color:var(--muted); font-style:italic; margin:0; }
+        .sintesis-chips { display:flex; align-items:center; gap:.55rem; flex-wrap:wrap; margin-bottom:.7rem; }
+        .sintesis-chip { font-family:${mono}; font-size:.62rem; font-weight:700; text-transform:uppercase; letter-spacing:.08em; border:1px solid; border-radius:4px; padding:.1rem .4rem; }
+        .sintesis-objeto { font-family:${serif}; font-weight:700; font-size:.95rem; }
+        .sintesis-monto { font-family:${mono}; font-size:.78rem; font-weight:700; color:var(--gold); }
+        .sintesis-bloque { margin-bottom:.75rem; }
+        .sintesis-bloque-tit { font-family:${mono}; font-size:.6rem; font-weight:700; text-transform:uppercase; letter-spacing:.12em; color:var(--muted); margin-bottom:.25rem; }
+        .sintesis-texto { font-size:.84rem; line-height:1.6; white-space:pre-wrap; }
+        .sintesis-texto.estrat { border-left:2px solid var(--gold); padding-left:.6rem; font-style:italic; }
+        .sintesis-stamp { font-family:${mono}; font-size:.62rem; color:var(--muted); text-align:right; }
+
+        .causa-tabs { display:flex; align-items:center; gap:.15rem; border-bottom:1px solid rgba(128,128,128,.25); margin-bottom:1rem; overflow-x:auto; }
+        .causa-tab { background:none; border:none; border-bottom:2px solid transparent; padding:.5rem .8rem; cursor:pointer; font-family:${mono}; font-size:.72rem; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); white-space:nowrap; }
+        .causa-tab:hover { color:var(--paper); }
+        .causa-tab.active { color:var(--gold); border-bottom-color:var(--gold); }
+        .causa-tab-n { margin-left:.4rem; font-size:.62rem; font-weight:400; opacity:.7; }
+
+        .hilo-toolbar { display:flex; justify-content:flex-end; margin-bottom:.6rem; }
+        .hilo { display:flex; flex-direction:column; }
+        .hilo-item { display:flex; gap:.75rem; }
+        .hilo-rail { position:relative; width:12px; flex:0 0 12px; display:flex; justify-content:center; }
+        .hilo-rail::before { content:''; position:absolute; top:0; bottom:0; width:1px; background:rgba(128,128,128,.28); }
+        .hilo-item:first-child .hilo-rail::before { top:9px; }
+        .hilo-item:last-child .hilo-rail::before { bottom:calc(100% - 9px); }
+        .hilo-dot { position:relative; width:9px; height:9px; border-radius:50%; margin-top:5px; flex:0 0 9px; }
+        .hilo-dot.mov { background:var(--gold); }
+        .hilo-dot.tarea { border-radius:2px; transform:rotate(45deg); }
+        .hilo-content { flex:1; padding-bottom:1.1rem; min-width:0; }
+        .hilo-top { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; margin-bottom:.25rem; }
+        .hilo-kind { font-family:${mono}; font-size:.6rem; font-weight:700; letter-spacing:.06em; border-radius:3px; padding:.1rem .35rem; }
+        .hilo-kind.mov { background:var(--gold); color:#0f0e0c; }
+        .hilo-kind.tarea { border:1px solid var(--muted); color:var(--muted); }
+        .hilo-fecha { font-family:${mono}; font-size:.66rem; color:var(--muted); }
+        .hilo-venc { font-family:${mono}; font-size:.66rem; font-weight:700; color:var(--urgent); }
+        .hilo-estado { font-family:${mono}; font-size:.62rem; color:var(--muted); }
+        .hilo-main { font-size:.86rem; line-height:1.5; }
+        .hilo-estrategia { font-size:.76rem; color:var(--muted); font-style:italic; border-left:2px solid rgba(128,128,128,.3); padding-left:.5rem; margin-top:.3rem; }
+      `}</style>
+
       <div style={{marginBottom:'.9rem'}}><button className="btn btn-ghost btn-sm" onClick={()=>navigate('causas')}>← Volver</button></div>
 
       <div className="causa-detail-header">
         <div style={{flex:1}}>
-          <div className="causa-detail-title">{c.caratula}{archivada&&<span style={{marginLeft:'.5rem',fontSize:'.6rem',fontFamily:'IBM Plex Mono,monospace',color:'var(--muted)',border:'1px solid var(--muted)',borderRadius:4,padding:'0 .35rem',verticalAlign:'middle'}}>ARCHIVADA</span>}</div>
+          <div className="causa-detail-title">{c.caratula}{archivada&&<span style={{marginLeft:'.5rem',fontSize:'.6rem',fontFamily:mono,color:'var(--muted)',border:'1px solid var(--muted)',borderRadius:4,padding:'0 .35rem',verticalAlign:'middle'}}>ARCHIVADA</span>}</div>
           <div className="causa-detail-sub">{[c.tribunal,c.fuero,c.juzgado,c.nro].filter(Boolean).join(' · ')}</div>
           {c.cliente&&<div className="causa-detail-sub">👤 {c.cliente}</div>}
           {pptoBar}
@@ -632,6 +791,56 @@ export function CausaDetail({ id, navigate, store }) {
           <button className="btn btn-ghost btn-sm" style={{color:'var(--paper)',borderColor:'#555'}} onClick={toggleArchivo}>{archivada?'↩ Desarchivar':'🗄 Archivar'}</button>
           <button className="btn btn-danger btn-sm" onClick={()=>{if(confirm('¿Eliminar causa y todos sus datos?')){deleteCausa(id);navigate('causas')}}}>Eliminar</button>
         </div>
+      </div>
+
+      {/* ── SÍNTESIS ── */}
+      <div className="card sintesis-card">
+        <div className="sintesis-head" onClick={toggleSint}>
+          <span className="sintesis-caret">{sintOpen?'▾':'▸'}</span>
+          <span className="sintesis-label">Síntesis</span>
+          {!sintOpen && haySintesis && (
+            <span className="sintesis-resumen">
+              {c.rol && <span style={{color:ROL_COLOR[c.rol]||'var(--muted)',fontWeight:700}}>{c.rol}</span>}
+              {c.objeto && <> · {c.objeto}</>}
+              {montoTxt && <> · {montoTxt}</>}
+            </span>
+          )}
+          {!sintOpen && !haySintesis && <span className="sintesis-resumen" style={{fontStyle:'italic'}}>Sin cargar</span>}
+          <span style={{marginLeft:'auto'}} onClick={e=>e.stopPropagation()}>
+            <button className="btn btn-ghost btn-xs" title="Editar síntesis" onClick={openSintModal}>✏</button>
+          </span>
+        </div>
+
+        {sintOpen && (
+          <div className="sintesis-body">
+            {!haySintesis ? (
+              <p className="sintesis-vacia">Todavía no cargaste la síntesis de esta causa. <button className="btn btn-ghost btn-xs" onClick={openSintModal}>Cargar ahora</button></p>
+            ) : (
+              <>
+                <div className="sintesis-chips">
+                  {c.rol && <span className="sintesis-chip" style={{borderColor:ROL_COLOR[c.rol],color:ROL_COLOR[c.rol]}}>{c.rol}</span>}
+                  {c.objeto && <span className="sintesis-objeto">{c.objeto}</span>}
+                  {montoTxt && <span className="sintesis-monto">{montoTxt}</span>}
+                </div>
+                {c.hechos && (
+                  <div className="sintesis-bloque">
+                    <div className="sintesis-bloque-tit">Antecedentes</div>
+                    <div className="sintesis-texto">{c.hechos}</div>
+                  </div>
+                )}
+                {c.estrategia_gral && (
+                  <div className="sintesis-bloque">
+                    <div className="sintesis-bloque-tit">Estrategia</div>
+                    <div className="sintesis-texto estrat">{c.estrategia_gral}</div>
+                  </div>
+                )}
+                {c.sintesis_updated_at && (
+                  <div className="sintesis-stamp">Actualizada el {fmtF(c.sintesis_updated_at)}</div>
+                )}
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Stats */}
@@ -649,51 +858,97 @@ export function CausaDetail({ id, navigate, store }) {
         ))}
       </div>
 
-      {/* Movimientos */}
-      <h3 style={{fontFamily:'Playfair Display,serif',fontSize:'1.05rem',marginBottom:'.65rem'}}>Movimientos</h3>
-      {movs.length===0
-        ? <p style={{color:'var(--muted)',fontSize:'.83rem',marginBottom:'1.3rem'}}>Sin movimientos.</p>
-        : (
-          <div style={{display:'flex',flexDirection:'column',gap:'.45rem',marginBottom:'1.3rem'}}>
-            {[...movs].reverse().map(r=>(
-              <div key={r.id} className="registro-entry">
-                <div className="registro-portal">{r.portal}</div>
-                <div className="registro-body">
-                  <div className="registro-novedad">{r.novedad}</div>
-                  {r.estrategia&&<div className="registro-estrategia">💡 {r.estrategia}</div>}
-                  <div className="registro-meta">
-                    <span>{fmtF(r.fecha)}</span>
-                    {r.tiene_vencimiento&&r.vencimiento_texto&&<span className="registro-venc">{r.vencimiento_texto}</span>}
+      {/* ── TABS ── */}
+      <div className="causa-tabs">
+        {[['hilo','Hilo',hilo.length],['movs','Movimientos',movs.length],['tareas','Tareas',tareasCausa.length],['gastos','Gastos',gList.length],['cobros','Cobros',cbList.length]].map(([k,l,n])=>(
+          <button key={k} className={`causa-tab ${tab===k?'active':''}`} onClick={()=>setTabP(k)}>
+            {l}<span className="causa-tab-n">{n}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* ── HILO ── */}
+      {tab==='hilo' && (
+        hilo.length===0
+          ? <div className="empty-state"><div className="icon">🧵</div><p>Sin movimientos ni tareas todavía.</p></div>
+          : <>
+              <div className="hilo-toolbar">
+                <button className="btn btn-ghost btn-xs" onClick={toggleHiloOrden} title="Cambiar sentido de lectura">
+                  {hiloAsc ? '↑ Cronológico' : '↓ Más reciente primero'}
+                </button>
+              </div>
+              <div className="hilo">
+                {hilo.map(item => item.tipo==='mov' ? (
+                  <div key={'m'+item.id} className="hilo-item">
+                    <div className="hilo-rail"><span className="hilo-dot mov" /></div>
+                    <div className="hilo-content">
+                      <div className="hilo-top">
+                        <span className="hilo-kind mov">{item.o.portal}</span>
+                        <span className="hilo-fecha">{fmtF(item.o.fecha)}</span>
+                        {item.o.tiene_vencimiento && item.o.vencimiento_texto && <span className="hilo-venc">{item.o.vencimiento_texto}</span>}
+                        <span style={{marginLeft:'auto',display:'flex',gap:'.25rem'}}>
+                          <button className="btn btn-ghost btn-xs" onClick={()=>openMovModal(item.o.id)}>✏</button>
+                          <button className="btn btn-ghost btn-xs" onClick={()=>{if(confirm('¿Eliminar movimiento?'))deleteRegistro(item.o.id)}}>🗑</button>
+                        </span>
+                      </div>
+                      <div className="hilo-main">{item.o.novedad}</div>
+                      {item.o.estrategia && <div className="hilo-estrategia">💡 {item.o.estrategia}</div>}
+                    </div>
+                  </div>
+                ) : (
+                  <div key={'t'+item.id} className="hilo-item">
+                    <div className="hilo-rail"><span className="hilo-dot tarea" style={{background:CRIT_COLOR[item.o.criticidad]||'var(--ok)'}} /></div>
+                    <div className="hilo-content">
+                      <div className="hilo-top">
+                        <span className="hilo-kind tarea">TAREA</span>
+                        <span className="hilo-fecha">{item.o.vencimiento ? 'Vence '+fmtF(item.o.vencimiento) : fmtF(item.o.fecha)}</span>
+                        <span className="hilo-estado">{ESTADO_LBL[item.o.estado]||item.o.estado}</span>
+                      </div>
+                      <div className="hilo-main">{CRIT_ICON[item.o.criticidad]||'🟢'} {item.o.titulo}</div>
+                      {item.o.notas && <div className="hilo-estrategia">{item.o.notas}</div>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+      )}
+
+      {/* ── MOVIMIENTOS ── */}
+      {tab==='movs' && (
+        movs.length===0
+          ? <p style={{color:'var(--muted)',fontSize:'.83rem'}}>Sin movimientos.</p>
+          : <div style={{display:'flex',flexDirection:'column',gap:'.45rem'}}>
+              {[...movs].reverse().map(r=>(
+                <div key={r.id} className="registro-entry">
+                  <div className="registro-portal">{r.portal}</div>
+                  <div className="registro-body">
+                    <div className="registro-novedad">{r.novedad}</div>
+                    {r.estrategia&&<div className="registro-estrategia">💡 {r.estrategia}</div>}
+                    <div className="registro-meta">
+                      <span>{fmtF(r.fecha)}</span>
+                      {r.tiene_vencimiento&&r.vencimiento_texto&&<span className="registro-venc">{r.vencimiento_texto}</span>}
+                    </div>
+                  </div>
+                  <div style={{display:'flex',flexDirection:'column',gap:'.3rem',alignSelf:'flex-start'}}>
+                    <button className="btn btn-ghost btn-xs" onClick={()=>openMovModal(r.id)}>✏</button>
+                    <button className="btn btn-ghost btn-xs" onClick={()=>{if(confirm('¿Eliminar movimiento?'))deleteRegistro(r.id)}}>🗑</button>
                   </div>
                 </div>
-                <div style={{display:'flex',flexDirection:'column',gap:'.3rem',alignSelf:'flex-start'}}>
-                  <button className="btn btn-ghost btn-xs" onClick={()=>openMovModal(r.id)}>✏</button>
-                  <button className="btn btn-ghost btn-xs" onClick={()=>{if(confirm('¿Eliminar movimiento?'))deleteRegistro(r.id)}}>🗑</button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )
-      }
+              ))}
+            </div>
+      )}
 
-      {/* Tareas de esta causa */}
-      {(() => {
-        const tareasCausa = (store.tareas||[]).filter(t=>t.causa===id)
-        if (!tareasCausa.length) return null
-        const co = { urgente:0, alta:1, normal:2, baja:3 }
-        const sorted = [...tareasCausa].sort((a,b)=>(co[a.criticidad]||2)-(co[b.criticidad]||2))
-        const critMap = { urgente:'🔴', alta:'🟠', normal:'🟢', baja:'⚪' }
-        const estadoMap = { 'no-iniciada':'No iniciada', 'en-curso':'En curso', 'completada':'Completada' }
-        return (
-          <div style={{marginBottom:'1.3rem'}}>
-            <h3 style={{fontFamily:'Playfair Display,serif',fontSize:'1.05rem',marginBottom:'.65rem'}}>Tareas</h3>
-            <div style={{display:'flex',flexDirection:'column',gap:'.4rem'}}>
-              {sorted.map(t=>(
+      {/* ── TAREAS ── */}
+      {tab==='tareas' && (
+        tareasCausa.length===0
+          ? <p style={{color:'var(--muted)',fontSize:'.83rem'}}>Sin tareas.</p>
+          : <div style={{display:'flex',flexDirection:'column',gap:'.4rem'}}>
+              {[...tareasCausa].sort((a,b)=>(CRIT_ORDEN[a.criticidad]??2)-(CRIT_ORDEN[b.criticidad]??2)).map(t=>(
                 <div key={t.id} className={`task-strip ${t.criticidad||'normal'}`}>
                   <div className="task-main">
-                    <div className="task-title">{critMap[t.criticidad]||'🟢'} {t.titulo}</div>
+                    <div className="task-title">{CRIT_ICON[t.criticidad]||'🟢'} {t.titulo}</div>
                     <div className="task-meta">
-                      <span>{estadoMap[t.estado]||t.estado}</span>
+                      <span>{ESTADO_LBL[t.estado]||t.estado}</span>
                       {t.vencimiento&&<span className="task-vencimiento">Vence: {fmtF(t.vencimiento)}</span>}
                       {t.notas&&<span className="task-notas">{t.notas.substring(0,55)}{t.notas.length>55?'…':''}</span>}
                     </div>
@@ -701,62 +956,104 @@ export function CausaDetail({ id, navigate, store }) {
                 </div>
               ))}
             </div>
-          </div>
-        )
-      })()}
-
-      {/* Gastos */}
-      <h3 style={{fontFamily:'Playfair Display,serif',fontSize:'1.05rem',marginBottom:'.65rem'}}>Gastos</h3>
-      {gList.length===0?<p style={{color:'var(--muted)',fontSize:'.83rem',marginBottom:'1.3rem'}}>Sin gastos.</p>:(
-        <>
-          <div style={{display:'flex',justifyContent:'flex-end',marginBottom:'.5rem'}}>
-            <button className="btn btn-primary btn-sm" disabled={selGastos.size===0} onClick={emitirReciboGastos}>
-              🧾 Emitir recibo{selGastos.size>0?` (${selGastos.size})`:''}
-            </button>
-          </div>
-          <div className="table-wrapper" style={{marginBottom:'1.3rem'}}>
-            <table>
-              <thead><tr>
-                <th style={{width:32,textAlign:'center'}}>
-                  <input type="checkbox"
-                    checked={gList.length>0 && selGastos.size===gList.length}
-                    onChange={e=>setSelGastos(e.target.checked ? new Set(gList.map(g=>g.id)) : new Set())} />
-                </th>
-                <th>Trámite</th><th>Cant.</th><th>P.U.</th><th>Total</th><th>Fecha</th>
-              </tr></thead>
-              <tbody>{gList.map(g=>(
-                <tr key={g.id} style={selGastos.has(g.id)?{background:'var(--cream)'}:undefined}>
-                  <td style={{textAlign:'center'}}><input type="checkbox" checked={selGastos.has(g.id)} onChange={()=>toggleGasto(g.id)} /></td>
-                  <td>{g.tramite_nombre}{g.recibo_nro?<span style={{fontFamily:'IBM Plex Mono,monospace',fontSize:'.68rem',color:'var(--muted)',marginLeft:'.4rem'}}>{fmtNro('PAG',g.recibo_nro)}</span>:null}</td>
-                  <td className="num">{g.cant}</td>
-                  <td className="num">${(g.precio_u||0).toLocaleString('es-AR')}</td>
-                  <td className="num" style={{fontWeight:700}}>${(g.total||0).toLocaleString('es-AR')}</td>
-                  <td>{g.fecha?fmtF(g.fecha):'-'}</td>
-                </tr>
-              ))}</tbody>
-              <tfoot><tr className="tfoot-row"><td></td><td colSpan="3" style={{padding:'.6rem .9rem'}}>TOTAL</td><td className="num" style={{padding:'.6rem .9rem',fontWeight:700}}>${tot.toLocaleString('es-AR')}</td><td></td></tr></tfoot>
-            </table>
-          </div>
-        </>
       )}
 
-      {/* Cobros */}
-      <h3 style={{fontFamily:'Playfair Display,serif',fontSize:'1.05rem',marginBottom:'.65rem'}}>Cobros</h3>
-      {cbList.length===0?<p style={{color:'var(--muted)',fontSize:'.83rem'}}>Sin cobros.</p>:(
-        <div className="table-wrapper">
-          <table>
-            <thead><tr><th>Concepto</th><th>Moneda</th><th>Fecha</th><th>Monto</th><th></th></tr></thead>
-            <tbody>{[...cbList].reverse().map(cb=>{const isUSD=cb.moneda==='USD';return(
-              <tr key={cb.id}><td>{cb.concepto}{cb.recibo_nro?<span style={{fontFamily:'IBM Plex Mono,monospace',fontSize:'.68rem',color:'var(--muted)',marginLeft:'.4rem'}}>{fmtNro('REC',cb.recibo_nro)}</span>:null}</td><td><span className={`cobro-moneda-badge ${isUSD?'usd':'ars'}`}>{isUSD?'USD':'ARS'}</span></td><td>{fmtF(cb.fecha)}</td><td className="num" style={{fontWeight:700,color:isUSD?'var(--usd)':'var(--ok)'}}>{isUSD?'U$S ':'$'}{(cb.monto||0).toLocaleString('es-AR')}</td><td><button className="btn btn-ghost btn-xs" title="Emitir recibo" onClick={()=>emitirReciboCobro(cb)}>🧾</button></td></tr>
-            )})}</tbody>
-          </table>
-        </div>
+      {/* ── GASTOS ── */}
+      {tab==='gastos' && (
+        gList.length===0
+          ? <p style={{color:'var(--muted)',fontSize:'.83rem'}}>Sin gastos.</p>
+          : (
+            <>
+              <div style={{display:'flex',justifyContent:'flex-end',marginBottom:'.5rem'}}>
+                <button className="btn btn-primary btn-sm" disabled={selGastos.size===0} onClick={emitirReciboGastos}>
+                  🧾 Emitir recibo{selGastos.size>0?` (${selGastos.size})`:''}
+                </button>
+              </div>
+              <div className="table-wrapper">
+                <table>
+                  <thead><tr>
+                    <th style={{width:32,textAlign:'center'}}>
+                      <input type="checkbox"
+                        checked={gList.length>0 && selGastos.size===gList.length}
+                        onChange={e=>setSelGastos(e.target.checked ? new Set(gList.map(g=>g.id)) : new Set())} />
+                    </th>
+                    <th>Trámite</th><th>Cant.</th><th>P.U.</th><th>Total</th><th>Fecha</th>
+                  </tr></thead>
+                  <tbody>{gList.map(g=>(
+                    <tr key={g.id} style={selGastos.has(g.id)?{background:'var(--cream)'}:undefined}>
+                      <td style={{textAlign:'center'}}><input type="checkbox" checked={selGastos.has(g.id)} onChange={()=>toggleGasto(g.id)} /></td>
+                      <td>{g.tramite_nombre}{g.recibo_nro?<span style={{fontFamily:mono,fontSize:'.68rem',color:'var(--muted)',marginLeft:'.4rem'}}>{fmtNro('PAG',g.recibo_nro)}</span>:null}</td>
+                      <td className="num">{g.cant}</td>
+                      <td className="num">${(g.precio_u||0).toLocaleString('es-AR')}</td>
+                      <td className="num" style={{fontWeight:700}}>${(g.total||0).toLocaleString('es-AR')}</td>
+                      <td>{g.fecha?fmtF(g.fecha):'-'}</td>
+                    </tr>
+                  ))}</tbody>
+                  <tfoot><tr className="tfoot-row"><td></td><td colSpan="3" style={{padding:'.6rem .9rem'}}>TOTAL</td><td className="num" style={{padding:'.6rem .9rem',fontWeight:700}}>${tot.toLocaleString('es-AR')}</td><td></td></tr></tfoot>
+                </table>
+              </div>
+            </>
+          )
+      )}
+
+      {/* ── COBROS ── */}
+      {tab==='cobros' && (
+        cbList.length===0
+          ? <p style={{color:'var(--muted)',fontSize:'.83rem'}}>Sin cobros.</p>
+          : (
+            <div className="table-wrapper">
+              <table>
+                <thead><tr><th>Concepto</th><th>Moneda</th><th>Fecha</th><th>Monto</th><th></th></tr></thead>
+                <tbody>{[...cbList].reverse().map(cb=>{const isUSD=cb.moneda==='USD';return(
+                  <tr key={cb.id}><td>{cb.concepto}{cb.recibo_nro?<span style={{fontFamily:mono,fontSize:'.68rem',color:'var(--muted)',marginLeft:'.4rem'}}>{fmtNro('REC',cb.recibo_nro)}</span>:null}</td><td><span className={`cobro-moneda-badge ${isUSD?'usd':'ars'}`}>{isUSD?'USD':'ARS'}</span></td><td>{fmtF(cb.fecha)}</td><td className="num" style={{fontWeight:700,color:isUSD?'var(--usd)':'var(--ok)'}}>{isUSD?'U$S ':'$'}{(cb.monto||0).toLocaleString('es-AR')}</td><td><button className="btn btn-ghost btn-xs" title="Emitir recibo" onClick={()=>emitirReciboCobro(cb)}>🧾</button></td></tr>
+                )})}</tbody>
+              </table>
+            </div>
+          )
+      )}
+
+      {/* ── Modal Síntesis ── */}
+      {sintModal&&(
+        <Modal title="Síntesis de la causa" onClose={()=>setSintModal(false)}>
+          <div style={{marginBottom:'.8rem',padding:'.5rem .8rem',background:'var(--cream)',borderRadius:6,fontSize:'.78rem',color:'var(--muted)',fontFamily:mono}}>
+            📁 {c.caratula.substring(0,60)}{c.caratula.length>60?'…':''}
+          </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label>Nuestra parte</label>
+              <select className="form-control" value={sRol} onChange={e=>setSRol(e.target.value)}>
+                <option value="">— Seleccione —</option>
+                {ROLES.map(r=><option key={r}>{r}</option>)}
+              </select>
+            </div>
+            <div className="form-group" style={{flex:2}}>
+              <label>Objeto</label>
+              <input className="form-control" value={sObjeto} onChange={e=>setSObjeto(e.target.value)} placeholder="Ej: Despido sin causa · Cobro de pesos · Daños y perjuicios" />
+            </div>
+          </div>
+          <div className="form-row">
+            <div className="form-group"><label>Monto reclamado</label><input type="number" className="form-control" value={sMonto} onChange={e=>setSMonto(e.target.value)} placeholder="0" /></div>
+            <div className="form-group"><label>Moneda</label><select className="form-control" value={sMonedaR} onChange={e=>setSMonedaR(e.target.value)}><option value="ARS">ARS $</option><option value="USD">USD U$S</option></select></div>
+          </div>
+          <div className="form-group" style={{marginBottom:'.9rem'}}>
+            <label>Antecedentes / Hechos</label>
+            <textarea className="form-control" rows="6" value={sHechos} onChange={e=>setSHechos(e.target.value)} placeholder="Qué pasó, qué se reclama o qué nos reclaman, cómo llegamos hasta acá…" />
+          </div>
+          <div className="form-group" style={{marginBottom:'1rem'}}>
+            <label>Estrategia general</label>
+            <textarea className="form-control" rows="3" value={sEstrat} onChange={e=>setSEstrat(e.target.value)} placeholder="La línea que venimos sosteniendo…" />
+          </div>
+          <div style={{display:'flex',justifyContent:'flex-end',gap:'.6rem'}}>
+            <button className="btn btn-ghost" onClick={()=>setSintModal(false)}>Cancelar</button>
+            <button className="btn btn-primary" onClick={handleSaveSintesis} disabled={sSaving}>{sSaving?'Guardando...':'Guardar'}</button>
+          </div>
+        </Modal>
       )}
 
       {/* ── Modal Nueva Tarea ── */}
       {tareaModal&&(
         <Modal title="Nueva Tarea" onClose={()=>setTareaModal(false)}>
-          <div style={{marginBottom:'.8rem',padding:'.5rem .8rem',background:'var(--cream)',borderRadius:6,fontSize:'.78rem',color:'var(--muted)',fontFamily:'IBM Plex Mono,monospace'}}>
+          <div style={{marginBottom:'.8rem',padding:'.5rem .8rem',background:'var(--cream)',borderRadius:6,fontSize:'.78rem',color:'var(--muted)',fontFamily:mono}}>
             📁 {c.caratula.substring(0,60)}{c.caratula.length>60?'…':''}
           </div>
           <div className="form-row">
@@ -780,7 +1077,7 @@ export function CausaDetail({ id, navigate, store }) {
       {/* ── Modal Movimiento (nuevo + editar) ── */}
       {movModal&&(
         <Modal title={movEditId ? 'Editar Movimiento' : 'Nuevo Movimiento'} onClose={()=>setMovModal(false)}>
-          <div style={{marginBottom:'.8rem',padding:'.5rem .8rem',background:'var(--cream)',borderRadius:6,fontSize:'.78rem',color:'var(--muted)',fontFamily:'IBM Plex Mono,monospace'}}>
+          <div style={{marginBottom:'.8rem',padding:'.5rem .8rem',background:'var(--cream)',borderRadius:6,fontSize:'.78rem',color:'var(--muted)',fontFamily:mono}}>
             📁 {c.caratula.substring(0,60)}{c.caratula.length>60?'…':''}
           </div>
           <div className="form-row">
@@ -819,7 +1116,7 @@ export function CausaDetail({ id, navigate, store }) {
                   <input type="date" className="form-control" value={mFechaInicio} onChange={e=>{setMFechaInicio(e.target.value);setMVencResult(null)}} style={{width:150}} />
                   <button className="btn btn-ghost btn-sm" onClick={calcVencimientoMov}>Recalcular</button>
                 </div>
-                {mCalcMsg&&<div style={{fontSize:'.75rem',color:'var(--muted)',marginTop:'.3rem',fontFamily:'IBM Plex Mono,monospace'}}>{mCalcMsg}</div>}
+                {mCalcMsg&&<div style={{fontSize:'.75rem',color:'var(--muted)',marginTop:'.3rem',fontFamily:mono}}>{mCalcMsg}</div>}
                 {mVencResult&&mCalcMsg&&<div className="vencimiento-result">{mVencResult.texto}</div>}
               </div>
             )}
@@ -880,3 +1177,4 @@ export function CausaDetail({ id, navigate, store }) {
 }
 
 export default Causas
+      
