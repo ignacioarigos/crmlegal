@@ -99,6 +99,11 @@ export async function miPerfil() {
   return rows?.[0] || null
 }
 
+// Los dos abogados del estudio (para el selector de responsable y los tags de autor)
+export async function getUsuarios() {
+  return sbFetch('crm_usuarios?select=id,codigo,nombre&order=codigo.asc')
+}
+
 // ── REST ─────────────────────────────────────────────────────
 async function sbFetch(path, opts = {}) {
   const token = await getAccessToken()   // token del usuario logueado (o anon si no hay)
