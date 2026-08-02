@@ -4,6 +4,7 @@ import { saveCausa, deleteCausa, saveCobro, saveGasto, saveTarea, saveRegistro, 
 import { uid, dateFmt, fmtF, FUEROS_CIVILES, sumarHabiles, sumarCorridos, fechaLarga } from '../lib/supabase.js'
 import Modal from '../components/Modal.jsx'
 import { imprimirRecibo, nextReciboNro, fmtNro } from '../lib/recibo.js'
+import { useSesion } from '../components/AuthGate.jsx'
 
 // normaliza acentos y mayúsculas para búsqueda por coincidencia
 const norm = (s) => (s || '').toString().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
@@ -39,6 +40,10 @@ const ESTADO_LBL = { 'no-iniciada':'No iniciada', 'en-curso':'En curso', 'comple
 
 export function Causas({ navigate, store }) {
   const { causas, gastos, registros } = store
+  const { user } = useSesion()
+  const usuarios = store.usuarios || []
+  const nombreAbogado = (id) => usuarios.find(u => u.id === id)?.nombre || '—'
+  const codigoAbogado = (id) => usuarios.find(u => u.id === id)?.codigo || ''
   const [modal, setModal] = useState(false)
   const [editId, setEditId] = useState(null)
   const [caratula, setCaratula] = useState('')
@@ -50,6 +55,8 @@ export function Causas({ navigate, store }) {
   const [estadoCausa, setEstadoCausa] = useState('activa')
   const [presupuesto, setPresupuesto] = useState('')
   const [moneda, setMoneda] = useState('ARS')
+  const [visibilidad, setVisibilidad] = useState('privada')
+  const [abogadoResp, setAbogadoResp] = useState('')
 
   // Búsqueda + filtros
   const [busqueda, setBusqueda] = useState('')
@@ -75,8 +82,10 @@ export function Causas({ navigate, store }) {
       setCaratula(c.caratula||''); setTribunal(c.tribunal||'PJN'); setFuero(c.fuero||'')
       setJuzgado(c.juzgado||''); setNro(c.nro||''); setCliente(c.cliente||'')
       setEstadoCausa(c.estado||'activa'); setPresupuesto(c.presupuesto||''); setMoneda(c.moneda||'ARS')
+      setVisibilidad(c.visibilidad||'privada'); setAbogadoResp(c.abogado_id||user.id)
     } else {
       setCaratula(''); setTribunal('PJN'); setFuero(''); setJuzgado(''); setNro(''); setCliente(''); setEstadoCausa('activa'); setPresupuesto(''); setMoneda('ARS')
+      setVisibilidad('privada'); setAbogadoResp(user.id)
     }
     setModal(true)
   }
@@ -84,7 +93,11 @@ export function Causas({ navigate, store }) {
   const handleSave = async () => {
     if (!caratula.trim()) return alert('Ingrese la carátula.')
     const prev = editId ? causas.find(x=>x.id===editId) : null
-    const obj = { ...(prev||{}), id: editId||uid(), caratula: caratula.trim(), tribunal, fuero, juzgado: juzgado.trim()||null, nro: nro.trim()||null, cliente: cliente.trim()||null, estado: estadoCausa, presupuesto: esCivil&&presupuesto?parseFloat(presupuesto):null, moneda: esCivil?moneda:null, fecha: prev?.fecha || new Date().toISOString() }
+    const esTitular = !editId || !prev?.titular_id || prev?.titular_id === user.id
+    const obj = { ...(prev||{}), id: editId||uid(), caratula: caratula.trim(), tribunal, fuero, juzgado: juzgado.trim()||null, nro: nro.trim()||null, cliente: cliente.trim()||null, estado: estadoCausa, presupuesto: esCivil&&presupuesto?parseFloat(presupuesto):null, moneda: esCivil?moneda:null, fecha: prev?.fecha || new Date().toISOString(),
+      abogado_id: abogadoResp || user.id,
+      visibilidad: esTitular ? visibilidad : (prev?.visibilidad || 'privada'),
+      ...(editId ? {} : { titular_id: user.id }) }
     await saveCausa(obj)
     setModal(false)
   }
@@ -93,6 +106,9 @@ export function Causas({ navigate, store }) {
   const toggleArchivo = async (c) => {
     await saveCausa({ ...c, estado: (c.estado === 'archivada' ? 'activa' : 'archivada') })
   }
+
+  const editing = editId ? causas.find(x=>x.id===editId) : null
+  const puedeCambiarVis = !editId || !editing?.titular_id || editing?.titular_id === user.id
 
   // Última actividad y cantidad de movimientos por causa
   const actMap = {}
@@ -174,6 +190,12 @@ export function Causas({ navigate, store }) {
     ? <span style={{fontSize:'.6rem',fontFamily:mono,fontWeight:700,textTransform:'uppercase',letterSpacing:'.07em',color:ROL_COLOR[c.rol]||'var(--muted)',border:`1px solid ${ROL_COLOR[c.rol]||'var(--muted)'}`,borderRadius:4,padding:'0 .3rem'}}>{c.rol}</span>
     : null
 
+  const visBadge = (c) => {
+    const comp = c.visibilidad === 'compartida'
+    const cod = codigoAbogado(c.abogado_id)
+    return <span style={{fontSize:'.6rem',fontFamily:mono,fontWeight:700,letterSpacing:'.04em',color:comp?'var(--slate)':'var(--muted)',border:`1px solid ${comp?'var(--slate)':'var(--muted)'}`,borderRadius:4,padding:'0 .3rem'}} title={comp?`Compartida${cod?' · '+nombreAbogado(c.abogado_id):''}`:'Privada'}>{comp?'👥':'🔒'}{cod?' '+cod:''}</span>
+  }
+
   // ── Render de una causa (fila de lista) ──
   const filaDe = (c) => {
     const archivada = (c.estado||'activa')==='archivada'
@@ -187,6 +209,7 @@ export function Causas({ navigate, store }) {
         </div>
         <div style={{display:'flex',gap:'.4rem',alignItems:'center'}} onClick={e=>e.stopPropagation()}>
           {rolTag(c)}
+          {visBadge(c)}
           {act&&<span style={{fontSize:'.66rem',fontFamily:mono,color:'var(--muted)',whiteSpace:'nowrap'}} title="Última actividad">⏱ {fmtF(act)}</span>}
           {saldoTag(c)}
           <button className="btn btn-ghost btn-xs" title={archivada?'Desarchivar':'Archivar'} onClick={()=>toggleArchivo(c)}>{archivada?'↩':'🗄'}</button>
@@ -231,6 +254,7 @@ export function Causas({ navigate, store }) {
         {/* footer */}
         <div style={{display:'flex',alignItems:'center',gap:'.5rem',marginTop:'auto',paddingTop:'.5rem',borderTop:'1px solid rgba(128,128,128,.18)'}} onClick={e=>e.stopPropagation()}>
           <span style={{fontSize:'.68rem',fontFamily:mono,color:'var(--muted)'}}>{nMovs} mov{nMovs===1?'':'s'}.</span>
+          {visBadge(c)}
           {saldoTag(c)}
           <span style={{marginLeft:'auto',display:'flex',gap:'.3rem'}}>
             <button className="btn btn-ghost btn-xs" title={archivada?'Desarchivar':'Archivar'} onClick={()=>toggleArchivo(c)}>{archivada?'↩':'🗄'}</button>
@@ -320,6 +344,10 @@ export function Causas({ navigate, store }) {
             <div className="form-group"><label>Cliente</label><input className="form-control" value={cliente} onChange={e=>setCliente(e.target.value)} /></div>
             <div className="form-group"><label>Estado</label><select className="form-control" value={estadoCausa} onChange={e=>setEstadoCausa(e.target.value)}><option value="activa">Activa</option><option value="archivada">Archivada</option></select></div>
           </div>
+          <div className="form-row">
+            <div className="form-group"><label>Abogado responsable</label><select className="form-control" value={abogadoResp} onChange={e=>setAbogadoResp(e.target.value)}>{usuarios.length===0&&<option value={user.id}>Yo</option>}{usuarios.map(u=><option key={u.id} value={u.id}>{u.nombre}</option>)}</select></div>
+            <div className="form-group"><label>Visibilidad</label><select className="form-control" value={visibilidad} onChange={e=>setVisibilidad(e.target.value)} disabled={!puedeCambiarVis}><option value="privada">🔒 Privada (solo yo)</option><option value="compartida">👥 Compartida (estudio)</option></select></div>
+          </div>
           {esCivil&&(
             <div className="form-row">
               <div className="form-group"><label>Presupuesto</label><input type="number" className="form-control" value={presupuesto} onChange={e=>setPresupuesto(e.target.value)} placeholder="0" /></div>
@@ -340,6 +368,8 @@ export function Causas({ navigate, store }) {
 export function CausaDetail({ id, navigate, store }) {
   const { causas, registros, gastos, cobros, tramites } = store
   const c = causas.find(x=>x.id===id)
+  const { user } = useSesion()
+  const usuarios = store.usuarios || []
 
   // ── Persistencia liviana ──
   const tget = (k,d) => { try { return localStorage.getItem(k) || d } catch { return d } }
@@ -627,6 +657,9 @@ export function CausaDetail({ id, navigate, store }) {
   if (!c) return <div className="empty-state"><p>Causa no encontrada</p></div>
 
   const archivada = (c.estado||'activa')==='archivada'
+  const esTitular = !c.titular_id || c.titular_id === user.id
+  const abogadoNombre = usuarios.find(u=>u.id===c.abogado_id)?.nombre
+  const esCompartida = c.visibilidad === 'compartida'
 
   const movs   = registros.filter(r=>r.causa===id)
   const gList  = gastos.filter(g=>g.causa===id)
@@ -780,6 +813,7 @@ export function CausaDetail({ id, navigate, store }) {
           <div className="causa-detail-title">{c.caratula}{archivada&&<span style={{marginLeft:'.5rem',fontSize:'.6rem',fontFamily:mono,color:'var(--muted)',border:'1px solid var(--muted)',borderRadius:4,padding:'0 .35rem',verticalAlign:'middle'}}>ARCHIVADA</span>}</div>
           <div className="causa-detail-sub">{[c.tribunal,c.fuero,c.juzgado,c.nro].filter(Boolean).join(' · ')}</div>
           {c.cliente&&<div className="causa-detail-sub">👤 {c.cliente}</div>}
+          {abogadoNombre&&<div className="causa-detail-sub">⚖ {abogadoNombre}{esCompartida?' · 👥 Compartida':' · 🔒 Privada'}</div>}
           {pptoBar}
         </div>
         <div style={{display:'flex',gap:'.4rem',flexWrap:'wrap'}}>
@@ -789,6 +823,7 @@ export function CausaDetail({ id, navigate, store }) {
           <button className="btn btn-ghost btn-sm" style={{color:'var(--paper)',borderColor:'#555'}} onClick={()=>setCobroModal(true)}>+ Cobro</button>
           <button className="btn btn-ghost btn-sm" style={{color:'var(--paper)',borderColor:'#555'}} onClick={handlePrintCausa}>🖨</button>
           <button className="btn btn-ghost btn-sm" style={{color:'var(--paper)',borderColor:'#555'}} onClick={toggleArchivo}>{archivada?'↩ Desarchivar':'🗄 Archivar'}</button>
+          {esTitular&&<button className="btn btn-ghost btn-sm" style={{color:'var(--paper)',borderColor:'#555'}} title={esCompartida?'Compartida con el estudio — clic para hacerla privada':'Privada — clic para compartir con el estudio'} onClick={()=>saveCausa({...c, visibilidad: esCompartida?'privada':'compartida'})}>{esCompartida?'👥 Compartida':'🔒 Privada'}</button>}
           <button className="btn btn-danger btn-sm" onClick={()=>{if(confirm('¿Eliminar causa y todos sus datos?')){deleteCausa(id);navigate('causas')}}}>Eliminar</button>
         </div>
       </div>
@@ -1177,4 +1212,3 @@ export function CausaDetail({ id, navigate, store }) {
 }
 
 export default Causas
-      
