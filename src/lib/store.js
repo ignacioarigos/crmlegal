@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { DB, uid, dateFmt, TRAMITES_DEFAULT } from '../lib/supabase.js'
+import { DB, uid, dateFmt, TRAMITES_DEFAULT, getUsuarios } from '../lib/supabase.js'
 
 // Estado global simple sin librería externa
 let _state = {
@@ -7,6 +7,7 @@ let _state = {
   eventos: [], tramites: [], cobros: [],
   siniestros: [], siniestro_docs: [], aseguradoras: [],
   siniestro_novedades: [], siniestro_ofertas: [], modelos: [],
+  usuarios: [],
   loaded: false,
 }
 let _listeners = []
@@ -43,6 +44,7 @@ export async function loadAll() {
   _state.gastos    = g  || []
   _state.eventos   = e  || []
   _state.cobros    = co || []
+  try { _state.usuarios = await getUsuarios() || [] } catch {}
   if (!tr || tr.length === 0) {
     await seedTramites()
   } else {
