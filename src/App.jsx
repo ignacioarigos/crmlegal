@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useStore, loadAll } from './lib/store.js'
 import { fetchFeriados, dateFmt, MESES_CORTOS } from './lib/supabase.js'
+import { useSesion } from './components/AuthGate.jsx'
 import Sidebar from './components/Sidebar.jsx'
 import Home from './screens/Home.jsx'
 import Tareas from './screens/Tareas.jsx'
@@ -21,6 +22,7 @@ export default function App() {
   const [lastSync, setLastSync] = useState(null)
   const syncTimer = useRef(null)
   const store = useStore()
+  const { perfil, logout } = useSesion()
 
   useEffect(() => {
     // Cargar feriados y datos
@@ -106,6 +108,22 @@ export default function App() {
           </div>
           <div className="header-date">
             {new Date().toLocaleDateString('es-AR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }).toUpperCase()}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '.5rem', paddingLeft: '.75rem', marginLeft: '.25rem', borderLeft: '1px solid var(--border, #E3E1DA)' }}>
+            <span style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: '.8rem', color: 'var(--muted, #6B7280)', whiteSpace: 'nowrap' }}>
+              {perfil?.nombre?.split(' ')[0] || '—'}
+            </span>
+            <button
+              onClick={logout}
+              title="Cerrar sesión"
+              style={{
+                fontFamily: 'IBM Plex Mono, monospace', fontSize: '.75rem', cursor: 'pointer',
+                background: 'transparent', border: '1px solid var(--border, #E3E1DA)',
+                borderRadius: '7px', padding: '.35rem .6rem', color: 'var(--muted, #6B7280)',
+              }}
+            >
+              Salir
+            </button>
           </div>
         </div>
       </header>
