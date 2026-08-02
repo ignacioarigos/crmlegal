@@ -1,8 +1,8 @@
 import { createContext, useContext, useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase.js'   // ← confirmá el nombre del export (ver nota)
+import { getSession, initSesion, onAuthChange, signOut, miPerfil } from '../lib/supabase.js'
 import Login from '../screens/Login.jsx'
 
-// Contexto de sesión: cualquier componente puede saber quién está logueado.
+// Contexto de sesión: cualquier componente sabe quién está logueado.
 //   const { user, perfil, logout } = useSesion()
 //   perfil = { codigo: 'N' | 'R', nombre: '...' }
 const SesionCtx = createContext(null)
@@ -13,28 +13,24 @@ export default function AuthGate({ children }) {
   const [sesion, setSesion] = useState(null)
   const [perfil, setPerfil] = useState(null)
 
-  // Sesión inicial + escucha de cambios (login / logout / refresh de token)
+  // Arranque: valida/refresca la sesión guardada y escucha cambios
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSesion(data.session)
+    let unsub = () => {}
+    initSesion().then((s) => {
+      setSesion(s || getSession())
       setCargando(false)
+      unsub = onAuthChange((ns) => setSesion(ns))
     })
-    const { data: sub } = supabase.auth.onAuthStateChange((_evt, s) => setSesion(s))
-    return () => sub.subscription.unsubscribe()
+    return () => unsub()
   }, [])
 
-  // Cuando hay sesión, traigo el perfil (código N/R y nombre) desde crm_usuarios
+  // Con sesión, traigo el perfil (código N/R y nombre)
   useEffect(() => {
-    if (!sesion?.user) { setPerfil(null); return }
-    supabase
-      .from('crm_usuarios')
-      .select('codigo, nombre')
-      .eq('id', sesion.user.id)
-      .single()
-      .then(({ data }) => setPerfil(data || null))
+    if (!sesion) { setPerfil(null); return }
+    miPerfil().then(setPerfil).catch(() => setPerfil(null))
   }, [sesion])
 
-  const logout = () => supabase.auth.signOut()
+  const logout = async () => { await signOut() }  // onAuthChange limpia la sesión
 
   if (cargando) {
     return (
