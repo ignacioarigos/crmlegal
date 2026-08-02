@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { supabase } from '../lib/supabase.js'   // ← confirmá el nombre del export (ver nota)
+import { signIn } from '../lib/supabase.js'
 
 export default function Login() {
   const [email, setEmail] = useState('')
@@ -10,15 +10,13 @@ export default function Login() {
   const entrar = async () => {
     if (cargando) return
     setError(''); setCargando(true)
-    const { error } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password: pass,
-    })
-    if (error) {
+    try {
+      await signIn(email.trim(), pass)
+      // Si entra bien, AuthGate detecta la sesión y monta la app solo.
+    } catch {
       setError('Correo o contraseña incorrectos.')
       setCargando(false)
     }
-    // Si entra bien, AuthGate detecta la sesión y monta la app solo.
   }
 
   const onKey = (e) => { if (e.key === 'Enter') entrar() }
