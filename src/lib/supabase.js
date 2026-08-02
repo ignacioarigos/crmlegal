@@ -2,11 +2,110 @@
 const SB_URL = 'https://vfhrpydvlknskmizsfsg.supabase.co'
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZmaHJweWR2bGtuc2ttaXpzZnNnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI3NjU3NzcsImV4cCI6MjA4ODM0MTc3N30.GDeW4taxDPjy3my09j2iBPIDL6YWBvYEkYWpZKo46-w'
 
+// ── Sesión / Auth (REST de Supabase, sin @supabase/supabase-js) ──
+const SESSION_KEY = 'crm_sesion'
+let _session = null
+const _subs = new Set()
+
+function loadSession() {
+  if (_session) return _session
+  try { _session = JSON.parse(localStorage.getItem(SESSION_KEY)) || null } catch { _session = null }
+  return _session
+}
+function saveSession(s) {
+  _session = s || null
+  try {
+    if (_session) localStorage.setItem(SESSION_KEY, JSON.stringify(_session))
+    else localStorage.removeItem(SESSION_KEY)
+  } catch {}
+  _subs.forEach(fn => { try { fn(_session) } catch {} })
+}
+function normalize(data) {
+  return {
+    access_token: data.access_token,
+    refresh_token: data.refresh_token,
+    expires_at: data.expires_at || Math.floor(Date.now() / 1000) + (data.expires_in || 3600),
+    user: data.user,
+  }
+}
+
+// Suscribirse a cambios de sesión (login / logout / refresh)
+export function onAuthChange(fn) { _subs.add(fn); return () => _subs.delete(fn) }
+export function getSession() { return loadSession() }
+export function getCurrentUser() { return loadSession()?.user || null }
+
+export async function signIn(email, password) {
+  const r = await fetch(SB_URL + '/auth/v1/token?grant_type=password', {
+    method: 'POST',
+    headers: { apikey: SB_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  })
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(data.error_description || data.msg || data.message || 'Login inválido')
+  saveSession(normalize(data))
+  return data.user
+}
+
+export async function signOut() {
+  const s = loadSession()
+  if (s?.access_token) {
+    try {
+      await fetch(SB_URL + '/auth/v1/logout', {
+        method: 'POST',
+        headers: { apikey: SB_KEY, Authorization: 'Bearer ' + s.access_token },
+      })
+    } catch {}
+  }
+  saveSession(null)
+}
+
+async function refreshSession() {
+  const s = loadSession()
+  if (!s?.refresh_token) return null
+  const r = await fetch(SB_URL + '/auth/v1/token?grant_type=refresh_token', {
+    method: 'POST',
+    headers: { apikey: SB_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refresh_token: s.refresh_token }),
+  })
+  const data = await r.json().catch(() => ({}))
+  if (!r.ok || !data.access_token) { saveSession(null); return null }
+  saveSession(normalize(data))
+  return _session
+}
+
+// Devuelve un access_token válido (refresca si está por vencer). null si no hay sesión.
+async function getAccessToken() {
+  const s = loadSession()
+  if (!s?.access_token) return null
+  if (s.expires_at && s.expires_at * 1000 < Date.now() + 60000) {
+    const refreshed = await refreshSession()
+    return refreshed?.access_token || null
+  }
+  return s.access_token
+}
+
+// Para el arranque: valida/refresca la sesión guardada. Devuelve la sesión o null.
+export async function initSesion() {
+  if (!loadSession()) return null
+  const token = await getAccessToken()
+  return token ? loadSession() : null
+}
+
+// Perfil del usuario actual (código N/R y nombre) desde crm_usuarios
+export async function miPerfil() {
+  const u = getCurrentUser()
+  if (!u) return null
+  const rows = await sbFetch('crm_usuarios?id=eq.' + u.id + '&select=codigo,nombre')
+  return rows?.[0] || null
+}
+
+// ── REST ─────────────────────────────────────────────────────
 async function sbFetch(path, opts = {}) {
+  const token = await getAccessToken()   // token del usuario logueado (o anon si no hay)
   const r = await fetch(SB_URL + '/rest/v1/' + path, {
     headers: {
       apikey: SB_KEY,
-      Authorization: 'Bearer ' + SB_KEY,
+      Authorization: 'Bearer ' + (token || SB_KEY),
       'Content-Type': 'application/json',
       Prefer: 'return=representation',
       ...(opts.extraHeaders || {}),
