@@ -557,15 +557,11 @@ export function CausaDetail({ id, navigate, store }) {
           ${campo('Juzgado', c.juzgado)}
           ${campo('Expediente', c.nro)}
           ${campo('Fuero', c.fuero)}
-          ${campo('Tribunal', c.tribunal)}
+          ${campo('Jurisdicción', c.tribunal)}
           ${campo('Cliente', c.cliente)}
           ${campo('Objeto', c.objeto)}
+          ${campo('Abogado responsable', ab.nombre)}
         </table>
-        <div class="pie">
-          <div class="ab">${ab.nombre} — ${ab.subtitulo}</div>
-          <div class="lin">${[ab.matricula, ab.domicilio].filter(Boolean).join(' · ')}</div>
-          ${ab.domicilio_electronico ? `<div class="lin">Domicilio electrónico: ${ab.domicilio_electronico}</div>` : ''}
-        </div>
       </div>
       </body></html>`
     const win = window.open('', '_blank')
@@ -682,23 +678,23 @@ export function CausaDetail({ id, navigate, store }) {
         .entry-strat { font-size: .75rem; color: #2c3e50; font-style: italic; border-left: 2px solid #b8922a; padding-left: .4rem; margin: .25rem 0; }
         .entry-meta { font-size: .68rem; color: #888; font-family: monospace; }
         .empty { color: #aaa; font-style: italic; font-size: .8rem; }
+        tr, .entry { page-break-inside: avoid; }
+        h2 { page-break-after: avoid; }
         @media print { body { padding: 0; } }
       </style>
       </head><body>
       <div class="header">
-        <div class="logo">ESTUDIO ARIGÓS — GESTIÓN LEGAL</div>
+        <div class="logo">ESTUDIO ARIGÓS — GESTIÓN LEGAL · Seguimiento</div>
         <h1>${c.caratula}</h1>
         <div class="meta">
-          ${[c.tribunal,c.fuero,c.juzgado,c.nro].filter(Boolean).join(' · ')}
-          ${c.cliente ? ` &nbsp;·&nbsp; 👤 ${c.cliente}` : ''}
-          &nbsp;·&nbsp; Impreso el ${new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'})}
+          ${c.nro ? 'Expte. ' + c.nro + ' &nbsp;·&nbsp; ' : ''}Impreso el ${new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'})}
         </div>
       </div>
-      ${secSintesis}
-      ${secMov}
-      ${secTareas}
-      ${secGastos}
-      ${secCobros}
+      ${secGastos}${secCobros}
+      <div ${(secGastos+secCobros).trim() ? 'style="page-break-before:always"' : ''}>
+        ${secMov}
+        ${secTareas}
+      </div>
       </body></html>
     `
     const win = window.open('', '_blank')
