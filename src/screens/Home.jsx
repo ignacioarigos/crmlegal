@@ -1,6 +1,20 @@
 import { fmtF } from '../lib/supabase.js'
+import { useSesion } from '../components/AuthGate.jsx'
+
+// Línea profesional del encabezado, propia de cada abogado.
+// Cada uno ve la suya; nunca los datos del otro.
+const HERO_LINEA = {
+  N: 'IGNACIO ARIGÓS — ABOGADO   |   TE: 11 5473-7787',
+  R: 'RAMÓN E. J. ARIGÓS — ABOGADO',
+}
+
 export default function Home({ navigate, store }) {
   const { tareas, causas, registros, cobros } = store
+  const { perfil } = useSesion()
+
+  const primerNombre = perfil?.nombre?.split(' ')[0] || 'Doctor'
+  const heroLinea = HERO_LINEA[perfil?.codigo] || ''
+
   const hoy = new Date().toDateString()
   const mes = `${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}`
   const pendientes  = tareas.filter(t => t.estado !== 'completada').length
@@ -20,8 +34,8 @@ export default function Home({ navigate, store }) {
   return (
     <div>
       <div className="home-hero">
-        <h1>Bienvenido,<br /><em>Dr. Arigós</em></h1>
-        <p>IGNACIO ARIGÓS — ABOGADO &nbsp;|&nbsp; TE: 1154737787</p>
+        <h1>Bienvenido,<br /><em>{primerNombre}</em></h1>
+        {heroLinea && <p>{heroLinea}</p>}
       </div>
       <div className="home-grid">
         {cards.map(card => (
