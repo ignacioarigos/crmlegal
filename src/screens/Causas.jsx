@@ -1,7 +1,7 @@
 // ── CAUSAS ────────────────────────────────────────────────────
 import { useState } from 'react'
 import { saveCausa, deleteCausa, saveCobro, saveGasto, saveTarea, saveRegistro, updateRegistro, deleteRegistro } from '../lib/store.js'
-import { uid, dateFmt, fmtF, FUEROS_CIVILES, sumarHabiles, sumarCorridos, fechaLarga } from '../lib/supabase.js'
+import { uid, dateFmt, fmtF, FUEROS_CIVILES, sumarHabiles, sumarCorridos, fechaLarga, siguienteRecibo } from '../lib/supabase.js'
 import Modal from '../components/Modal.jsx'
 import { imprimirRecibo, nextReciboNro, fmtNro } from '../lib/recibo.js'
 import { useSesion } from '../components/AuthGate.jsx'
@@ -788,7 +788,7 @@ export function CausaDetail({ id, navigate, store }) {
   // Recibo de un cobro (uno por fila)
   const emitirReciboCobro = async (cb) => {
     let nro = cb.recibo_nro
-    if (!nro) { nro = nextReciboNro(cobros); await saveCobro({ ...cb, recibo_nro: nro }) }
+    if (!nro) { nro = await siguienteRecibo('REC'); await saveCobro({ ...cb, recibo_nro: nro }) }
     imprimirRecibo({ tipo:'cobro', nroFmt: fmtNro('REC', nro), fecha: cb.fecha, monto: cb.monto, moneda: cb.moneda||'ARS', concepto: cb.concepto, tribunal: c.tribunal, abogado: abogadoCodigo })
   }
 
@@ -799,7 +799,7 @@ export function CausaDetail({ id, navigate, store }) {
   const emitirReciboGastos = async () => {
     const seleccion = gList.filter((g) => selGastos.has(g.id))
     if (!seleccion.length) return
-    const nro = nextReciboNro(gastos)
+    const nro = await siguienteRecibo('PAG')
     for (const g of seleccion) {
       if (g.recibo_nro !== nro) await saveGasto({ ...g, recibo_nro: nro })
     }
