@@ -104,6 +104,13 @@ export async function getUsuarios() {
   return sbFetch('crm_usuarios?select=id,codigo,nombre&order=codigo.asc')
 }
 
+// Próximo número de recibo desde el contador compartido de la base.
+//   tipo: 'REC' (cobros) | 'PAG' (gastos)
+export async function siguienteRecibo(tipo) {
+  const r = await sbFetch('rpc/siguiente_recibo', { method: 'POST', body: JSON.stringify({ p_tipo: tipo }) })
+  return Array.isArray(r) ? r[0] : r
+}
+
 // ── REST ─────────────────────────────────────────────────────
 async function sbFetch(path, opts = {}) {
   const token = await getAccessToken()   // token del usuario logueado (o anon si no hay)
