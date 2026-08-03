@@ -715,6 +715,7 @@ export function CausaDetail({ id, navigate, store }) {
     if (!u) return null
     return <span style={{fontFamily:mono,fontSize:'.58rem',fontWeight:700,letterSpacing:'.04em',color:'var(--muted)',border:'1px solid var(--muted)',borderRadius:3,padding:'0 .25rem'}} title={u.nombre}>{u.codigo}.</span>
   }
+  const abogadoCodigo = usuarios.find(u=>u.id===c.abogado_id)?.codigo || 'N'
 
   const movs   = registros.filter(r=>r.causa===id)
   const gList  = gastos.filter(g=>g.causa===id)
@@ -788,7 +789,7 @@ export function CausaDetail({ id, navigate, store }) {
   const emitirReciboCobro = async (cb) => {
     let nro = cb.recibo_nro
     if (!nro) { nro = nextReciboNro(cobros); await saveCobro({ ...cb, recibo_nro: nro }) }
-    imprimirRecibo({ tipo:'cobro', nroFmt: fmtNro('REC', nro), fecha: cb.fecha, monto: cb.monto, moneda: cb.moneda||'ARS', concepto: cb.concepto, tribunal: c.tribunal })
+    imprimirRecibo({ tipo:'cobro', nroFmt: fmtNro('REC', nro), fecha: cb.fecha, monto: cb.monto, moneda: cb.moneda||'ARS', concepto: cb.concepto, tribunal: c.tribunal, abogado: abogadoCodigo })
   }
 
   // Selección múltiple de gastos + un solo recibo con todos los seleccionados
@@ -808,6 +809,7 @@ export function CausaDetail({ id, navigate, store }) {
       fecha: dateFmt(new Date()),
       moneda: 'ARS',
       tribunal: c.tribunal,
+      abogado: abogadoCodigo,
       items: seleccion.map((g) => ({ concepto: g.tramite_nombre, cantidad: g.cant, monto: g.total })),
     })
     setSelGastos(new Set())
@@ -871,7 +873,7 @@ export function CausaDetail({ id, navigate, store }) {
           {abogadoNombre&&<div className="causa-detail-sub">⚖ {abogadoNombre}{esCompartida?' · 👥 Compartida':' · 🔒 Privada'}</div>}
           {pptoBar}
         </div>
-        <div style={{display:'flex',gap:'.4rem',flexWrap:'wrap'}}>
+        <div style={{display:'flex',gap:'.4rem',flexWrap:'wrap',flex:'1 1 100%',marginTop:'.5rem'}}>
           <button className="btn btn-primary btn-sm" onClick={openTareaModal}>＋ Tarea</button>
           <button className="btn btn-primary btn-sm" style={{background:'var(--slate)',borderColor:'var(--slate)'}} onClick={()=>openMovModal()}>＋ Movimiento</button>
           <button className="btn btn-ghost btn-sm" style={{color:'var(--paper)',borderColor:'#555'}} onClick={()=>setGastoModal(true)}>+ Gasto</button>
