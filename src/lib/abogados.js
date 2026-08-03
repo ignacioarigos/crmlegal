@@ -10,9 +10,9 @@ export const ABOGADOS = {
     telefono: '11 5473-7787',
     matriculas: ['T° 120 F° 824 — C.P.A.C.F.', 'T° LVII F° 344 — C.A.S.I.'],
     porTribunal: {
-      PJN:  { matricula: 'T° 120 F° 824 — C.P.A.C.F.', domicilio: 'Paraná N° 597, Piso 2, Of. "15", C.A.B.A.', domicilio_electronico: '23312893169' },
-      EJE:  { matricula: 'T° 120 F° 824 — C.P.A.C.F.', domicilio: 'Paraná N° 597, Piso 2, Of. "15", C.A.B.A.', domicilio_electronico: '23312893169' },
-      SCBA: { matricula: 'T° LVII F° 344 — C.A.S.I.', domicilio: 'Adolfo Alsina N° 1.756, Florida, Vicente López.', domicilio_electronico: '23312893169@notificaciones.scba.gov.ar' },
+      PJN:  { matricula: 'T° 120 F° 824 — C.P.A.C.F.', domicilio: 'Paraná N° 597, Piso 2, Of. "15", C.A.B.A.', domicilio_electronico: '23312893169', lugar: 'C.A.B.A.' },
+      EJE:  { matricula: 'T° 120 F° 824 — C.P.A.C.F.', domicilio: 'Paraná N° 597, Piso 2, Of. "15", C.A.B.A.', domicilio_electronico: '23312893169', lugar: 'C.A.B.A.' },
+      SCBA: { matricula: 'T° LVII F° 344 — C.A.S.I.', domicilio: 'Adolfo Alsina N° 1.756, Florida, Vicente López.', domicilio_electronico: '23312893169@notificaciones.scba.gov.ar', lugar: 'Vicente López' },
     },
   },
   R: {
@@ -22,8 +22,8 @@ export const ABOGADOS = {
     telefono: '',
     matriculas: ['T° 68 F° 119 — C.P.A.C.F.'],
     porTribunal: {
-      PJN: { matricula: 'T° 68 F° 119 — C.P.A.C.F.', domicilio: 'Paraná N° 597, Piso 2, Of. "15", C.A.B.A.', domicilio_electronico: '2011614283' },
-      EJE: { matricula: 'T° 68 F° 119 — C.P.A.C.F.', domicilio: 'Paraná N° 597, Piso 2, Of. "15", C.A.B.A.', domicilio_electronico: '2011614283' },
+      PJN: { matricula: 'T° 68 F° 119 — C.P.A.C.F.', domicilio: 'Paraná N° 597, Piso 2, Of. "15", C.A.B.A.', domicilio_electronico: '2011614283', lugar: 'C.A.B.A.' },
+      EJE: { matricula: 'T° 68 F° 119 — C.P.A.C.F.', domicilio: 'Paraná N° 597, Piso 2, Of. "15", C.A.B.A.', domicilio_electronico: '2011614283', lugar: 'C.A.B.A.' },
       // Ramón no actúa en SCBA
     },
   },
