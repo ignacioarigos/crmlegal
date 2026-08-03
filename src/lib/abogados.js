@@ -37,3 +37,20 @@ export function datosAbogado(codigo, tribunal) {
   const t = ab.porTribunal[trib] || ab.porTribunal.PJN || Object.values(ab.porTribunal)[0] || {}
   return { ...ab, ...t }
 }
+
+// ── Datos del ESTUDIO (para recibos: identidad única, emita quien emita) ──
+export const ESTUDIO = {
+  nombre: 'Estudio Arigós',
+  subtitulo: 'Abogados',
+  porTribunal: {
+    PJN:  { matriculas: ['T° 120 F° 824 — C.P.A.C.F.', 'T° 68 F° 119 — C.P.A.C.F.'], domicilio: 'Paraná N° 597, Piso 2, Of. "15", C.A.B.A.', lugar: 'C.A.B.A.' },
+    EJE:  { matriculas: ['T° 120 F° 824 — C.P.A.C.F.', 'T° 68 F° 119 — C.P.A.C.F.'], domicilio: 'Paraná N° 597, Piso 2, Of. "15", C.A.B.A.', lugar: 'C.A.B.A.' },
+    SCBA: { matriculas: ['T° LVII F° 344 — C.A.S.I.'], domicilio: 'Adolfo Alsina N° 1.756, Florida, Vicente López.', lugar: 'Vicente López' },
+  },
+}
+
+export function datosEstudio(tribunal) {
+  const trib = (tribunal || 'PJN').toUpperCase()
+  const t = ESTUDIO.porTribunal[trib] || ESTUDIO.porTribunal.PJN
+  return { nombre: ESTUDIO.nombre, subtitulo: ESTUDIO.subtitulo, ...t }
+}
