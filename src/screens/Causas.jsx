@@ -5,6 +5,7 @@ import { uid, dateFmt, fmtF, FUEROS_CIVILES, sumarHabiles, sumarCorridos, fechaL
 import Modal from '../components/Modal.jsx'
 import { imprimirRecibo, nextReciboNro, fmtNro } from '../lib/recibo.js'
 import { useSesion } from '../components/AuthGate.jsx'
+import { datosAbogado } from '../lib/abogados.js'
 
 // normaliza acentos y mayúsculas para búsqueda por coincidencia
 const norm = (s) => (s || '').toString().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
@@ -438,7 +439,7 @@ export function CausaDetail({ id, navigate, store }) {
   const handleSaveTarea = async () => {
     if (!tTitulo.trim()) return alert('Ingrese un título.')
     setTSaving(true)
-    await saveTarea({ id: uid(), titulo: tTitulo.trim(), causa: id, criticidad: tVenc?'urgente':tCrit, vencimiento: tVenc||null, estado: tEstado, notas: tNotas.trim()||null, fecha: new Date().toISOString() })
+    await saveTarea({ id: uid(), titulo: tTitulo.trim(), causa: id, criticidad: tVenc?'urgente':tCrit, vencimiento: tVenc||null, estado: tEstado, notas: tNotas.trim()||null, autor_id: user.id, fecha: new Date().toISOString() })
     setTSaving(false); setTareaModal(false)
   }
 
@@ -509,15 +510,68 @@ export function CausaDetail({ id, navigate, store }) {
         tiene_vencimiento: mTieneVenc,
         vencimiento_fecha: mTieneVenc && mVencResult ? mVencResult.fecha : null,
         vencimiento_texto: mTieneVenc && mVencResult ? mVencResult.texto : null,
+        autor_id: user.id,
         fecha: new Date().toISOString()
       }
       await saveRegistro(obj)
       if (mCrearTarea) {
         const tt = mTareaTitulo.trim() || mNovedad.substring(0, 80)
-        await saveTarea({ id: uid(), titulo: tt, causa: id, criticidad: mTieneVenc && mVencResult ? 'urgente' : 'normal', vencimiento: mTieneVenc && mVencResult ? mVencResult.fecha : null, estado: 'no-iniciada', notas: mEstrategia.trim() || null, fecha: new Date().toISOString() })
+        await saveTarea({ id: uid(), titulo: tt, causa: id, criticidad: mTieneVenc && mVencResult ? 'urgente' : 'normal', vencimiento: mTieneVenc && mVencResult ? mVencResult.fecha : null, estado: 'no-iniciada', notas: mEstrategia.trim() || null, autor_id: user.id, fecha: new Date().toISOString() })
       }
     }
     setMovModal(false)
+  }
+
+  // ── Imprimir carátula (tapa para la carpeta física) ──
+  const handlePrintCaratula = () => {
+    if (!c) return
+    const abCod = usuarios.find(u=>u.id===c.abogado_id)?.codigo || 'N'
+    const ab = datosAbogado(abCod, c.tribunal)
+    const campo = (label, val) => val ? `<tr><td class="lbl">${label}</td><td class="val">${String(val)}</td></tr>` : ''
+    const html = `
+      <!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>${c.caratula} — Carátula</title>
+      <style>
+        @page { size:A4; margin:0 }
+        * { box-sizing:border-box }
+        body { margin:0; font-family:'Times New Roman',serif; color:#111 }
+        .sheet { width:210mm; min-height:297mm; padding:32mm 26mm; display:flex; flex-direction:column }
+        .estudio { text-align:center; border-bottom:2px solid #1F4D3F; padding-bottom:9mm; margin-bottom:16mm }
+        .estudio .nombre { font-size:30pt; letter-spacing:.03em; color:#1F4D3F; font-weight:bold }
+        .estudio .sub { font-size:10pt; letter-spacing:.35em; text-transform:uppercase; color:#555; margin-top:3mm }
+        .caratula { font-size:22pt; line-height:1.35; text-align:center; font-weight:bold; margin:4mm 0 16mm }
+        table.datos { width:100%; border-collapse:collapse; font-size:13pt }
+        table.datos td { padding:3.6mm 2mm; border-bottom:1px solid #ccc; vertical-align:top }
+        td.lbl { width:36mm; text-transform:uppercase; font-size:9.5pt; letter-spacing:.1em; color:#666; font-family:Arial,sans-serif }
+        td.val { font-weight:bold }
+        .pie { margin-top:auto; border-top:1px solid #1F4D3F; padding-top:6mm; font-size:10.5pt; text-align:center; color:#222 }
+        .pie .ab { font-weight:bold; font-size:12pt }
+        .pie .lin { margin-top:1.5mm; color:#555 }
+      </style></head><body>
+      <div class="sheet">
+        <div class="estudio">
+          <div class="nombre">Estudio Arigós</div>
+          <div class="sub">Abogados</div>
+        </div>
+        <div class="caratula">${c.caratula}</div>
+        <table class="datos">
+          ${campo('Juzgado', c.juzgado)}
+          ${campo('Expediente', c.nro)}
+          ${campo('Fuero', c.fuero)}
+          ${campo('Tribunal', c.tribunal)}
+          ${campo('Cliente', c.cliente)}
+          ${campo('Objeto', c.objeto)}
+        </table>
+        <div class="pie">
+          <div class="ab">${ab.nombre} — ${ab.subtitulo}</div>
+          <div class="lin">${[ab.matricula, ab.domicilio].filter(Boolean).join(' · ')}</div>
+          ${ab.domicilio_electronico ? `<div class="lin">Domicilio electrónico: ${ab.domicilio_electronico}</div>` : ''}
+        </div>
+      </div>
+      </body></html>`
+    const win = window.open('', '_blank')
+    if (!win) { alert('Permití las ventanas emergentes para imprimir.'); return }
+    win.document.write(html); win.document.close(); win.focus()
+    setTimeout(() => win.print(), 400)
   }
 
   // ── Imprimir causa ──
@@ -603,7 +657,7 @@ export function CausaDetail({ id, navigate, store }) {
     const html = `
       <!DOCTYPE html><html><head>
       <meta charset="UTF-8">
-      <title>${c.caratula} — I|A</title>
+      <title>${c.caratula} — Estudio Arigós</title>
       <style>
         body { font-family: 'IBM Plex Sans', Arial, sans-serif; padding: 2rem; color: #111; font-size: 13px; max-width: 900px; margin: 0 auto; }
         .header { border-bottom: 3px solid #b8922a; padding-bottom: 1rem; margin-bottom: 1.5rem; }
@@ -632,7 +686,7 @@ export function CausaDetail({ id, navigate, store }) {
       </style>
       </head><body>
       <div class="header">
-        <div class="logo">I|A — GESTIÓN LEGAL</div>
+        <div class="logo">ESTUDIO ARIGÓS — GESTIÓN LEGAL</div>
         <h1>${c.caratula}</h1>
         <div class="meta">
           ${[c.tribunal,c.fuero,c.juzgado,c.nro].filter(Boolean).join(' · ')}
@@ -660,6 +714,11 @@ export function CausaDetail({ id, navigate, store }) {
   const esTitular = !c.titular_id || c.titular_id === user.id
   const abogadoNombre = usuarios.find(u=>u.id===c.abogado_id)?.nombre
   const esCompartida = c.visibilidad === 'compartida'
+  const autorTag = (autorId) => {
+    const u = usuarios.find(x => x.id === autorId)
+    if (!u) return null
+    return <span style={{fontFamily:mono,fontSize:'.58rem',fontWeight:700,letterSpacing:'.04em',color:'var(--muted)',border:'1px solid var(--muted)',borderRadius:3,padding:'0 .25rem'}} title={u.nombre}>{u.codigo}.</span>
+  }
 
   const movs   = registros.filter(r=>r.causa===id)
   const gList  = gastos.filter(g=>g.causa===id)
@@ -821,7 +880,8 @@ export function CausaDetail({ id, navigate, store }) {
           <button className="btn btn-primary btn-sm" style={{background:'var(--slate)',borderColor:'var(--slate)'}} onClick={()=>openMovModal()}>＋ Movimiento</button>
           <button className="btn btn-ghost btn-sm" style={{color:'var(--paper)',borderColor:'#555'}} onClick={()=>setGastoModal(true)}>+ Gasto</button>
           <button className="btn btn-ghost btn-sm" style={{color:'var(--paper)',borderColor:'#555'}} onClick={()=>setCobroModal(true)}>+ Cobro</button>
-          <button className="btn btn-ghost btn-sm" style={{color:'var(--paper)',borderColor:'#555'}} onClick={handlePrintCausa}>🖨</button>
+          <button className="btn btn-ghost btn-sm" style={{color:'var(--paper)',borderColor:'#555'}} title="Imprimir carátula para la carpeta" onClick={handlePrintCaratula}>🗂 Carátula</button>
+          <button className="btn btn-ghost btn-sm" style={{color:'var(--paper)',borderColor:'#555'}} title="Imprimir planilla de seguimiento" onClick={handlePrintCausa}>🖨 Seguimiento</button>
           <button className="btn btn-ghost btn-sm" style={{color:'var(--paper)',borderColor:'#555'}} onClick={toggleArchivo}>{archivada?'↩ Desarchivar':'🗄 Archivar'}</button>
           {esTitular&&<button className="btn btn-ghost btn-sm" style={{color:'var(--paper)',borderColor:'#555'}} title={esCompartida?'Compartida con el estudio — clic para hacerla privada':'Privada — clic para compartir con el estudio'} onClick={()=>saveCausa({...c, visibilidad: esCompartida?'privada':'compartida'})}>{esCompartida?'👥 Compartida':'🔒 Privada'}</button>}
           <button className="btn btn-danger btn-sm" onClick={()=>{if(confirm('¿Eliminar causa y todos sus datos?')){deleteCausa(id);navigate('causas')}}}>Eliminar</button>
@@ -919,6 +979,7 @@ export function CausaDetail({ id, navigate, store }) {
                     <div className="hilo-content">
                       <div className="hilo-top">
                         <span className="hilo-kind mov">{item.o.portal}</span>
+                        {autorTag(item.o.autor_id)}
                         <span className="hilo-fecha">{fmtF(item.o.fecha)}</span>
                         {item.o.tiene_vencimiento && item.o.vencimiento_texto && <span className="hilo-venc">{item.o.vencimiento_texto}</span>}
                         <span style={{marginLeft:'auto',display:'flex',gap:'.25rem'}}>
@@ -936,6 +997,7 @@ export function CausaDetail({ id, navigate, store }) {
                     <div className="hilo-content">
                       <div className="hilo-top">
                         <span className="hilo-kind tarea">TAREA</span>
+                        {autorTag(item.o.autor_id)}
                         <span className="hilo-fecha">{item.o.vencimiento ? 'Vence '+fmtF(item.o.vencimiento) : fmtF(item.o.fecha)}</span>
                         <span className="hilo-estado">{ESTADO_LBL[item.o.estado]||item.o.estado}</span>
                       </div>
@@ -961,6 +1023,7 @@ export function CausaDetail({ id, navigate, store }) {
                     {r.estrategia&&<div className="registro-estrategia">💡 {r.estrategia}</div>}
                     <div className="registro-meta">
                       <span>{fmtF(r.fecha)}</span>
+                      {autorTag(r.autor_id)}
                       {r.tiene_vencimiento&&r.vencimiento_texto&&<span className="registro-venc">{r.vencimiento_texto}</span>}
                     </div>
                   </div>
@@ -984,6 +1047,7 @@ export function CausaDetail({ id, navigate, store }) {
                     <div className="task-title">{CRIT_ICON[t.criticidad]||'🟢'} {t.titulo}</div>
                     <div className="task-meta">
                       <span>{ESTADO_LBL[t.estado]||t.estado}</span>
+                      {autorTag(t.autor_id)}
                       {t.vencimiento&&<span className="task-vencimiento">Vence: {fmtF(t.vencimiento)}</span>}
                       {t.notas&&<span className="task-notas">{t.notas.substring(0,55)}{t.notas.length>55?'…':''}</span>}
                     </div>
