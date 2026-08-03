@@ -1,6 +1,6 @@
 // src/lib/recibo.js
 import { fmtF } from './supabase.js'
-import { datosAbogado } from './abogados.js'
+import { datosEstudio } from './abogados.js'
 import firmaSelloUrl from '../../firma-sello.png'
 
 // ╔══════════════════════════════════════════════════════════════╗
@@ -109,12 +109,12 @@ function construir({ tipo, nroFmt, fecha, monto, moneda, concepto, tribunal, ite
   const banda = esCobro
     ? 'Recibí la suma que se detalla a continuación:'
     : 'Se deja constancia del pago según el siguiente detalle:'
-  const ab = datosAbogado(abogado || 'N', tribunal)
-  const dom = { dir: ab.domicilio || '', lugar: ab.lugar || '' }
+  const est = datosEstudio(tribunal)
+  const dom = { dir: est.domicilio || '', lugar: est.lugar || '' }
   const fechaTxt = fecha ? fmtF(fecha) : fmtF(new Date().toISOString().slice(0, 10))
   const nombreHead = 'ESTUDIO ARIGÓS'
-  const matHtml = (ab.matriculas || []).map(m => `<div>${m}</div>`).join('')
-  const raw = (abogado || 'N') === 'N' ? (firmaSelloUrl || '') : ''
+  const matHtml = (est.matriculas || []).map(m => `<div>${m}</div>`).join('')
+  const raw = firmaSelloUrl || ''
   const firmaSrc = /^(https?:|data:)/.test(raw) ? raw : (raw && raw.startsWith('/') ? window.location.origin + raw : raw)
 
   // celdas del detalle
@@ -141,8 +141,7 @@ function construir({ tipo, nroFmt, fecha, monto, moneda, concepto, tribunal, ite
     <tr>
       <td style="${F}padding:10px 12px;text-align:center;vertical-align:top;color:#000;">
         <div style="font-size:14px;font-weight:bold;letter-spacing:.02em;">${nombreHead}</div>
-        <div style="font-size:10px;letter-spacing:.02em;margin-top:2px;color:#000;">${ab.nombre}</div>
-        <div style="font-size:9px;letter-spacing:.22em;text-transform:uppercase;margin-top:1px;color:#222;">${ab.subtitulo || 'Abogado'}</div>
+        <div style="font-size:9px;letter-spacing:.22em;text-transform:uppercase;margin-top:2px;color:#222;">${est.subtitulo || 'Abogados'}</div>
         <div style="display:inline-block;border:1px solid #000;border-radius:2px;padding:4px 12px;margin-top:8px;font-size:9px;line-height:1.7;letter-spacing:.02em;">${matHtml}</div>
         <div style="font-size:9px;margin-top:7px;line-height:1.5;">${dom.dir}</div>
       </td>
