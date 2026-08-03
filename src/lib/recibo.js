@@ -1,5 +1,6 @@
 // src/lib/recibo.js
 import { fmtF } from './supabase.js'
+import { datosAbogado } from './abogados.js'
 import firmaSelloUrl from '../../firma-sello.png'
 
 // ╔══════════════════════════════════════════════════════════════╗
@@ -96,7 +97,7 @@ function waitImages(root) {
 }
 
 // Devuelve el HTML del recibo con TODOS los estilos en línea (nada depende de CSS externo).
-function construir({ tipo, nroFmt, fecha, monto, moneda, concepto, tribunal, items }) {
+function construir({ tipo, nroFmt, fecha, monto, moneda, concepto, tribunal, items, abogado }) {
   const esCobro  = tipo === 'cobro'
   const simbolo  = moneda === 'USD' ? 'U$S' : '$'
   const fmtMonto = (v) => `${simbolo} ${(v || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -108,12 +109,13 @@ function construir({ tipo, nroFmt, fecha, monto, moneda, concepto, tribunal, ite
   const banda = esCobro
     ? 'Recibí la suma que se detalla a continuación:'
     : 'Se deja constancia del pago según el siguiente detalle:'
-  const dom = MIS_DATOS.domicilios[tribunal] || MIS_DATOS.domicilios[MIS_DATOS.defaultTribunal]
+  const ab = datosAbogado(abogado || 'N', tribunal)
+  const dom = { dir: ab.domicilio || '', lugar: ab.lugar || '' }
   const fechaTxt = fecha ? fmtF(fecha) : fmtF(new Date().toISOString().slice(0, 10))
-  const nombreHead = `IA&nbsp;&nbsp;|&nbsp;&nbsp;${MIS_DATOS.nombre.toUpperCase()}`
-  const matHtml = (MIS_DATOS.matriculas || []).map(m => `<div>${m}</div>`).join('')
-  const raw = MIS_DATOS.firmaSello || ''
-  const firmaSrc = /^(https?:|data:)/.test(raw) ? raw : (raw.startsWith('/') ? window.location.origin + raw : raw)
+  const nombreHead = 'ESTUDIO ARIGÓS'
+  const matHtml = (ab.matriculas || []).map(m => `<div>${m}</div>`).join('')
+  const raw = (abogado || 'N') === 'N' ? (firmaSelloUrl || '') : ''
+  const firmaSrc = /^(https?:|data:)/.test(raw) ? raw : (raw && raw.startsWith('/') ? window.location.origin + raw : raw)
 
   // celdas del detalle
   const thBase = `${F}background:#ececec;color:#000;border:1px solid #000;padding:5px 8px;font-size:9px;text-transform:uppercase;letter-spacing:.04em;`
@@ -139,7 +141,8 @@ function construir({ tipo, nroFmt, fecha, monto, moneda, concepto, tribunal, ite
     <tr>
       <td style="${F}padding:10px 12px;text-align:center;vertical-align:top;color:#000;">
         <div style="font-size:14px;font-weight:bold;letter-spacing:.02em;">${nombreHead}</div>
-        <div style="font-size:9px;letter-spacing:.22em;text-transform:uppercase;margin-top:2px;color:#222;">${MIS_DATOS.subtitulo || ''}</div>
+        <div style="font-size:10px;letter-spacing:.02em;margin-top:2px;color:#000;">${ab.nombre}</div>
+        <div style="font-size:9px;letter-spacing:.22em;text-transform:uppercase;margin-top:1px;color:#222;">${ab.subtitulo || 'Abogado'}</div>
         <div style="display:inline-block;border:1px solid #000;border-radius:2px;padding:4px 12px;margin-top:8px;font-size:9px;line-height:1.7;letter-spacing:.02em;">${matHtml}</div>
         <div style="font-size:9px;margin-top:7px;line-height:1.5;">${dom.dir}</div>
       </td>
