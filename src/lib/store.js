@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { DB, uid, dateFmt, TRAMITES_DEFAULT, getUsuarios } from '../lib/supabase.js'
+import { DB, uid, dateFmt, TRAMITES_DEFAULT, getUsuarios, getCurrentUser } from '../lib/supabase.js'
 
 // Estado global simple sin librería externa
 let _state = {
@@ -134,6 +134,7 @@ export async function saveGasto(obj) {
     await DB.update('crm_gastos', obj.id, obj)
     _state.gastos = _state.gastos.map(x => x.id === obj.id ? obj : x)
   } else {
+    if (obj.autor_id == null) obj.autor_id = getCurrentUser()?.id
     await DB.insert('crm_gastos', obj)
     _state.gastos = [..._state.gastos, obj]
   }
@@ -180,6 +181,7 @@ export async function saveCobro(obj) {
     await DB.update('crm_cobros', obj.id, obj)
     _state.cobros = _state.cobros.map(x => x.id === obj.id ? obj : x)
   } else {
+    if (obj.autor_id == null) obj.autor_id = getCurrentUser()?.id
     await DB.insert('crm_cobros', obj)
     _state.cobros = [..._state.cobros, obj]
   }
